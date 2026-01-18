@@ -273,18 +273,20 @@ class _BarChartRace:
     def get_frames(self):
         frames = []
         slider_steps = []
+        
+        cols = self.df_values.columns.values.copy()
+
         for i in range(len(self.df_values)):
             bar_locs = self.df_ranks.iloc[i].values
             top_filt = (bar_locs >= 0) & (bar_locs < self.n_bars + 1)
             bar_vals = self.df_values.iloc[i].values
-            bar_vals[bar_locs == 0] = 0
-            bar_vals[bar_locs == self.n_bars + 1] = 0
+            #bar_vals[bar_locs == 0] = 0
+            #bar_vals[bar_locs == self.n_bars + 1] = 0
             # self.set_value_limit(bar_vals) # plotly bug? not updating range
             
-            cols = self.df_values.columns.values.copy()
-            cols[bar_locs == 0] = ' '
+            #cols[bar_locs == 0] = ' '
             colors = self.bar_colors
-            bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10_000 # done to prevent stacking of bars
+            #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
             x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
 
             label_axis = dict(tickmode='array', tickvals=bar_locs, ticktext=cols, 
@@ -306,8 +308,8 @@ class _BarChartRace:
             data = [bar]
             xaxis, yaxis = (value_axis, label_axis) if self.orientation == 'h' \
                              else (label_axis, value_axis)
-
-            annotations = self.get_annotations(i)
+            
+            annotations = self.get_annotations(i) # 
             if self.slider and i % self.steps_per_period == 0:
                 slider_steps.append(
                             {"args": [[i],
@@ -341,7 +343,7 @@ class _BarChartRace:
     def get_annotations(self, i):
         annotations = []
         if self.period_label:
-            self.period_label['text'] = self.get_period_label_text(i)
+            self.period_label['text'] = self.get_period_label_text(i) + ' ' + str(i)
             annotations.append(self.period_label)
 
         if self.period_summary_func:
@@ -760,4 +762,4 @@ def bar_chart_race_plotly(df, filename=None, orientation='h', sort='desc', n_bar
                         colors, title, bar_size, bar_textposition, bar_texttemplate, bar_label_font, 
                         tick_label_font, hovertemplate, slider, scale, bar_kwargs, layout_kwargs, 
                         write_html_kwargs, filter_column_colors)
-    return bcr.make_animation()
+    return bcr
