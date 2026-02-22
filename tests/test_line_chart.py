@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import matplotlib.pyplot as plt
-import bar_chart_race as bcr
+import bar_chart_race_ as bcr
 
 
 df_race = pd.read_csv('tests/data/lcr_data.csv', index_col='date', parse_dates=['date'])

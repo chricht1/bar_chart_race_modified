@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import bar_chart_race as bcr
+import bar_chart_race_ as bcr
 import plotly.graph_objects as go
 import plotly
 from plotly.subplots import make_subplots
-from bar_chart_race import load_dataset, bar_chart_race_plotly
+from bar_chart_race_ import load_dataset, bar_chart_race_plotly
 
 
 df = load_dataset('covid19')

@@ -4,7 +4,7 @@ import pandas as pd
 
 from ._bar_chart_race import bar_chart_race as bcr
 from ._line_chart_race import line_chart_race as lcr
-from ._utils import prepare_wide_data as pwd, prepare_long_data as pld
+from ._utils import prepare_wide_data as pwd
 
 
 @pd.api.extensions.register_dataframe_accessor("bcr")
@@ -49,17 +49,10 @@ class _BCR:
         return pwd(self._df, orientation, sort, n_bars, interpolate_period,
                                  steps_per_period, compute_ranks)
 
-    def prepare_long_data(self, index, columns, values, aggfunc='sum', orientation='h', 
-                          sort='desc', n_bars=None, interpolate_period=False, 
-                          steps_per_period=10, compute_ranks=True):
-        return pld(self._df, index, columns, values, aggfunc, orientation, 
-                   sort, n_bars, interpolate_period, steps_per_period, compute_ranks)
-
 
 _BCR.bar_chart_race.__doc__ = re.sub('df : .*(?=filename :)', '',  bcr.__doc__, flags=re.S)
 _BCR.line_chart_race.__doc__ = re.sub('df : .*(?=filename :)', '',  lcr.__doc__, flags=re.S)
 _BCR.prepare_wide_data.__doc__ = re.sub('df : .*(?=filename :)', '',  pwd.__doc__, flags=re.S)
-_BCR.prepare_long_data.__doc__ = re.sub('df : .*(?=filename :)', '',  pld.__doc__, flags=re.S)
 
 import importlib
 if importlib.util.find_spec('plotly'):

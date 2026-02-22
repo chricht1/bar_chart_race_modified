@@ -1,5 +1,5 @@
 import pandas as pd
-import bar_chart_race as bcr
+import bar_chart_race_ as bcr
 
 
 class TestLoadData:

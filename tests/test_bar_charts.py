@@ -1,6 +1,6 @@
 import pytest
 import matplotlib.pyplot as plt
-from bar_chart_race import load_dataset, bar_chart_race
+from bar_chart_race_ import load_dataset, bar_chart_race
 
 
 df = load_dataset('covid19')
