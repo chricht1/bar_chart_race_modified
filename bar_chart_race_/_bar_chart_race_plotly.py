@@ -15,13 +15,16 @@ from ._utils import prepare_wide_data
 
 class _BarChartRace:
     
-    def __init__(self, filename, orientation, sort, n_bars, fixed_order, fixed_max,
+    def __init__(self, data_filename, data_is_wide, out_filename, orientation, sort, n_bars, fixed_order, fixed_max,
                  steps_per_period, period_length, end_period_pause, interpolate_period, 
                  period_label, period_template, period_summary_func, perpendicular_bar_func, 
                  title, bar_size, bar_textposition, bar_texttemplate, bar_label_font, 
                  tick_label_font, hovertemplate, slider, scale, bar_kwargs, layout_kwargs, 
-                 write_html_kwargs, filter_column_colors, autorange_vals, val_ax_label):
-        self.filename = filename
+                 write_html_kwargs, filter_column_colors, fixed_xaxis, val_ax_label, scatter_labels, frame_subset):
+        
+        self.data_filename = data_filename
+        self.data_is_wide = data_is_wide
+        self.out_filename = out_filename
         self.extension = self.get_extension()
         self.orientation = orientation
         self.sort = sort
@@ -36,7 +39,8 @@ class _BarChartRace:
         self.period_template = period_template
         self.period_summary_func = period_summary_func
         self.perpendicular_bar_func = perpendicular_bar_func
-        self.title = self.get_title(title)
+        self.scatter_labels = scatter_labels
+        #self.title = self.get_title(title)
         self.bar_size = bar_size
         self.bar_textposition = bar_textposition
         self.bar_texttemplate = self.get_bar_texttemplate(bar_texttemplate)
@@ -55,31 +59,47 @@ class _BarChartRace:
         self.layout_kwargs = self.get_layout_kwargs(layout_kwargs)
         self.df_vals, self.df_ranks, self.pw_names = self.get_plot_data()
         self.col_filt = self.get_col_filt()
-        self.pw_colors = self.get_pw_colors()
+        self.pw_colors, pw_color_is_dark = self.generate_large_palette(len(self.pw_names))
         self.set_fixed_max_limits()
         self.str_index = self.df_vals.index.astype('str')
 
-        self.inside_label_font = {**self.bar_label_font, "color": "#ffffff"}
-        self.outside_label_font = {**self.bar_label_font, "color": "#2a2a2a"}
+        self.bar_customdata = None
+        self.bar_text = None
+        self.insidetextfont = self.bar_label_font
+        if not(self.scatter_labels):           
+            self.insidetextfont = None
+            self.bar_textposition = 'auto'
+        #self.inside_label_font_colors = self.get_inside_label_colors(pw_color_is_dark)
+        self.inside_label_font = {**self.bar_label_font, "color": "#696969"}
+        self.outside_label_font = {**self.bar_label_font, "color": "#696969"}#"#2a2a2a"}
 
-        
-        self.autorange_vals = autorange_vals
-        self.val_ax_range = self.get_val_ax_range(autorange_vals)
+        self.fixed_xaxis = fixed_xaxis
+        self.val_ax_range = self.get_val_ax_range(fixed_xaxis)
         self.val_ax_label = val_ax_label
 
+        self.frame_subset = frame_subset
+
     def get_extension(self):
-        if self.filename:
-            return self.filename.split('.')[-1]
+        if self.data_filename:
+            return self.data_filename.split('.')[-1]
 
     def get_bar_texttemplate(self, bar_texttemplate):
         if bar_texttemplate is None:
-            bar_texttemplate = "%{x:,.2f}"
+            if self.scatter_labels:
+                bar_texttemplate = "%{x:,.2f}"
+            else:
+                bar_texttemplate = "%{text}  %{x:,.2f}"#"%{x:,.2f}"#"%{customdata}  %{x:,.2f}"
+
         return bar_texttemplate
+
 
     def get_scatter_texttemplate(self, scatter_texttemplate):
         if scatter_texttemplate is None:
             scatter_texttemplate = "%{customdata}"
         return scatter_texttemplate
+
+    def get_inside_label_colors(self, pw_color_is_dark):
+        return np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
 
     def get_plot_area_pixels(self):
         width = 1000
@@ -160,10 +180,10 @@ class _BarChartRace:
     #     return bar_lengths_px >= text_widths_px
 
     def validate_params(self):
-        if isinstance(self.filename, str):
-            if '.' not in self.filename:
+        if isinstance(self.data_filename, str):
+            if '.' not in self.data_filename:
                 raise ValueError('`filename` must have an extension')
-        elif self.filename is not None:
+        elif self.data_filename is not None:
             raise TypeError('`filename` must be None or a string')
             
         if self.sort not in ('asc', 'desc'):
@@ -197,8 +217,8 @@ class _BarChartRace:
         raise TypeError('`layout_kwargs` must be None, a dictionary mapping '
                         '`go.Layout` parameters to values or an instance of `go.Layout`.')
 
-    def get_val_ax_range(self, autorange_vals):
-        if autorange_vals:
+    def get_val_ax_range(self, fixed_xaxis):
+        if fixed_xaxis:
             val_ax_range = None
         else:
             val_ax_range = [0, self.df_vals.to_numpy().max()]
@@ -275,16 +295,20 @@ class _BarChartRace:
 
 
     def get_wide_df_and_lut(self):
-        wide_df_fpath = './data/pathway_data_wide.csv'
-        if os.path.exists(wide_df_fpath) and os.path.exists('./data/pathway_names.txt'):
-            df_wide = pd.read_csv(wide_df_fpath, index_col='window')
+        if self.data_filename is None:
+            self.data_filename = './data/pathway_data_wide.csv'
+        if self.data_filename == './data/covid19.csv':
+            df_wide = pd.read_csv(self.data_filename)
+            return df_wide, None
+        if os.path.exists(self.data_filename) and os.path.exists('./data/pathway_names.txt'):
+            df_wide = pd.read_csv(self.data_filename, index_col='window')
             with open('./data/pathway_names.txt') as f:
                 pw_names = np.array(f.readlines())
         else: 
             df, pw_names = self.get_pw_df_and_lut('./data/pathway_data.csv')
             df_wide = pd.pivot_table(df, values='-log10(p.adj)', index='window', columns='pathway.idx')
             df_wide = df_wide.fillna(0)
-            df_wide.to_csv(wide_df_fpath)
+            df_wide.to_csv(self.data_filename)
         return df_wide, pw_names
     
 
@@ -305,9 +329,9 @@ class _BarChartRace:
         df_wide = df_wide.reindex(new_index)
 
         df_wide_interp = df_wide.interpolate()
-        top20 = np.sort(df_wide_interp.to_numpy(), axis=1)[:, -self.n_bars:][:, ::-1]
+        topN = np.sort(df_wide_interp.to_numpy(), axis=1)[:, -self.n_bars:][:, ::-1]
 
-        df_vals = pd.DataFrame(top20, index=df_wide_interp.index, columns=range(1, self.n_bars + 1))
+        df_vals = pd.DataFrame(topN, index=df_wide_interp.index, columns=range(1, self.n_bars + 1))
         #df_vals.to_csv('df_vals_interp.csv')
 
         df_ranks_wide = df_wide_interp.rank(axis=1, method='first', ascending=False)
@@ -319,7 +343,7 @@ class _BarChartRace:
 
         df_ranks = df_ser.pivot(index='window', columns=0, values='level_1')
         return df_vals, df_ranks, pw_names
-            
+
 
     def get_col_filt(self):
         col_filt = pd.Series([True] * self.df_vals.shape[1])
@@ -337,14 +361,10 @@ class _BarChartRace:
                 self.df_ranks = self.df_ranks.loc[:, col_filt]
         return col_filt
         
-    def get_pw_colors(self):
-        color_pal = self.generate_large_palette(len(self.pw_names))
-        pw_colors = np.random.permutation(color_pal)
-
-        return pw_colors
 
     def _rgb_to_hex(self, r, g, b):
         return "#{:02X}{:02X}{:02X}".format(int(r * 255), int(g * 255), int(b * 255))
+
 
     def generate_large_palette(self, n,
                             sat_values=(0.9, 0.7, 0.55),
@@ -376,16 +396,21 @@ class _BarChartRace:
 
         # interleave variations to avoid adjacent very-similar colors
         colors = []
+        is_dark = []
         for i, h in enumerate(hues):
             # For variety, rotate variation order every hue
             for j in range(per_hue):
                 s, v = variations[(j + i) % per_hue]
                 r, g, b = colorsys.hsv_to_rgb(h, s, v)
                 colors.append(self._rgb_to_hex(r, g, b))
-                if len(colors) >= n:
-                    return colors[:n]
-
-        return colors[:n]
+                is_dark.append(np.sum(np.array([r, g, b] * np.array([299, 587, 114])))/1000 < 123) 
+                # estimate perceived brightness of color for 
+                #https://stackoverflow.com/questions/49437263/contrast-between-label-and-background-determine-if-color-is-light-or-dark
+                if len(colors) == n:
+                    perm = np.random.permutation(np.array(range(n)))
+                    colors = np.array(colors)[perm]
+                    is_dark = np.array(is_dark)[perm]
+                    return colors, is_dark
 
     def set_fixed_max_limits(self):
         label_limit = (.2, self.n_bars + .8)
@@ -400,29 +425,26 @@ class _BarChartRace:
         else:
             self.xlimit = label_limit
             self.ylimit = value_limit
-        
- 
+            
+
     def get_frames(self):
         frames = []
         slider_steps = []
 
         bar_locs = np.arange(self.n_bars, 0, -1)
         
-        if not self.autorange_vals:
+        if not self.fixed_xaxis:
             max_bar_val = self.df_vals.to_numpy().max()
 
-        for i in tqdm(range(len(self.df_vals[:1000])), 'creating frames'):
+        if self.frame_subset is None: self.frame_subset = len(self.df_vals)
+        for i in tqdm(range(len(self.df_vals[:self.frame_subset])), 'creating frames'):
             
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
 
-            label_ids = self.df_ranks.iloc[i].values
-            colors = self.pw_colors[label_ids]
-            label_names = self.pw_names[label_ids]
-            #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
-            x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
-
+            data = self.get_data(i, bar_locs, bar_vals, max_bar_val)
+            
             label_axis = dict()#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
-                             # tickfont=self.tick_label_font)
+                            # tickfont=self.tick_label_font)
 
             label_axis['range'] = self.ylimit if self.orientation == 'h' else self.xlimit
             if self.orientation == 'v':
@@ -431,59 +453,6 @@ class _BarChartRace:
             value_axis = dict(showgrid=True, type=self.scale, title=self.val_ax_label)#, tickformat=',.0f')
             value_axis['range'] = self.xlimit if self.orientation == 'h' else self.ylimit
 
-            bar = go.Bar(
-                x=x, y=y,
-                #customdata=label_names,
-                textposition=self.bar_textposition,
-                texttemplate=self.bar_texttemplate,
-                orientation=self.orientation,
-                marker_color=colors,
-                cliponaxis=False,
-                outsidetextfont=self.bar_label_font,
-                hovertemplate=self.hovertemplate,
-                **self.bar_kwargs
-            )
-
-            if self.autorange_vals:
-                max_bar_val = max(bar_vals)
-            labels_inside_bar = bar_vals >= max_bar_val / 2
-            inside_offset = 0.015*max_bar_val
-            outside_offsets = 0.05*max_bar_val#[0.01*len(str(bar_val)) for bar_val in bar_vals]
-            inside_x = np.asarray(x - inside_offset, dtype=object)
-            inside_y = np.asarray(y, dtype=object)
-            outside_x = np.asarray(x + outside_offsets, dtype=object)#np.asarray(x + outside_offset, dtype=object)
-            outside_y = np.asarray(y, dtype=object)
-
-            inside_x[~labels_inside_bar] = None
-            inside_y[~labels_inside_bar] = None
-            outside_x[labels_inside_bar] = None
-            outside_y[labels_inside_bar] = None
-
-            inside_labels = go.Scatter(
-                x=inside_x, y=inside_y,
-                customdata=label_names,
-                mode="text",
-                texttemplate=self.scatter_texttemplate,
-                textposition="middle left",
-                textfont=self.inside_label_font,
-                cliponaxis=False,
-                hoverinfo="skip",
-                showlegend=False
-            )
-
-            outside_labels = go.Scatter(
-                x=outside_x, y=outside_y,
-                customdata=label_names,
-                mode="text",
-                texttemplate=self.scatter_texttemplate,
-                textposition="middle right",
-                textfont=self.outside_label_font,
-                cliponaxis=False,
-                hoverinfo="skip",
-                showlegend=False
-            )
-
-            data = [bar, inside_labels, outside_labels]
             xaxis, yaxis = (value_axis, label_axis) if self.orientation == 'h' \
                              else (label_axis, value_axis)
             
@@ -498,9 +467,11 @@ class _BarChartRace:
                                 }],
                             "label": self.get_period_label_text(i), 
                             "method": "animate"})
+            title = title = {'text': f'Locally enriched pathways per sliding window position {i/self.steps_per_period}',
+                            'x': 0.5, 'xref': 'paper', 'xanchor': 'center', 'yanchor': 'top'}
             layout = go.Layout(xaxis=xaxis, yaxis=yaxis, #annotations=annotations,
                                 autosize=False, width=1000, height=800, #margin={'l': 150}, 
-                                title=f'Locally enriched pathways per sliding window position {i/self.steps_per_period}', 
+                                title=title, 
                                 **self.layout_kwargs)
             if self.perpendicular_bar_func:
                 pbar = self.get_perpendicular_bar(bar_vals, i, layout)
@@ -508,6 +479,88 @@ class _BarChartRace:
             frames.append(go.Frame(data=data, layout=layout, name=i))
 
         return frames, slider_steps
+    
+
+    def get_data(self, i, bar_locs, bar_vals, max_bar_val):
+
+        label_ids = self.df_ranks.iloc[i].values
+        colors = self.pw_colors[label_ids]
+        label_names = self.pw_names[label_ids]
+
+        if self.fixed_xaxis:
+            max_bar_val = max(bar_vals)
+
+        #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
+        x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
+
+        if not(self.scatter_labels): 
+            val_labels = np.round(x, 2).astype(str)
+            #self.bar_customdata = self.pw_names[label_ids]
+            self.bar_text=np.char.add(self.pw_names[label_ids], np.char.add(['  '], val_labels))
+
+        bar = go.Bar(
+            x=x, y=y,
+            ids=label_ids.astype(str),
+            #customdata=self.bar_customdata,
+            #text = self.bar_text,
+            textposition=self.bar_textposition,
+            texttemplate=self.bar_texttemplate,
+            orientation=self.orientation,
+            marker_color=colors,
+            cliponaxis=False,
+            insidetextfont=self.insidetextfont,
+            outsidetextfont=self.bar_label_font,
+            hovertemplate=self.hovertemplate,
+            **self.bar_kwargs
+        )     
+
+        if self.scatter_labels: 
+
+            labels_inside_bar = bar_vals >= max_bar_val / 2
+            inside_offset = 0.015*max_bar_val
+            outside_offsets = 0.05*max_bar_val#[0.01*len(str(bar_val)) for bar_val in bar_vals]
+            inside_x = np.asarray(x - inside_offset, dtype=object)
+            inside_y = np.asarray(y, dtype=object)
+            outside_x = np.asarray(x + outside_offsets, dtype=object)#np.asarray(x + outside_offset, dtype=object)
+            outside_y = np.asarray(y, dtype=object)
+
+            inside_x[~labels_inside_bar] = None
+            inside_y[~labels_inside_bar] = None
+            outside_x[labels_inside_bar] = None
+            outside_y[labels_inside_bar] = None
+
+            #self.inside_label_font = {**self.bar_label_font, "color": self.inside_label_font_colors[label_ids[labels_inside_bar]]}
+
+            inside_labels = go.Scatter(
+                x=inside_x, y=inside_y,
+                ids=label_ids.astype(str),
+                customdata=label_names,
+                mode="text",
+                texttemplate=self.scatter_texttemplate,
+                textposition="middle left",
+                textfont=self.inside_label_font,
+                cliponaxis=False,
+                hoverinfo="skip",
+                showlegend=False
+            )
+
+            outside_labels = go.Scatter(
+                x=outside_x, y=outside_y,
+                ids=label_ids.astype(str),
+                customdata=label_names,
+                mode="text",
+                texttemplate=self.scatter_texttemplate,
+                textposition="middle right",
+                textfont=self.outside_label_font,
+                cliponaxis=False,
+                hoverinfo="skip",
+                showlegend=False
+            )
+
+            return [bar, inside_labels, outside_labels]
+        
+        else:
+            return [bar]
 
     def get_period_label_text(self, i):
         if self.period_template:
@@ -567,7 +620,6 @@ class _BarChartRace:
         frames, slider_steps = self.get_frames()
         data = frames[0].data
         layout = frames[0].layout
-        layout.title = self.title
         layout.updatemenus = [dict(
             type="buttons",
             direction = "left",
@@ -578,10 +630,10 @@ class _BarChartRace:
             buttons=[dict(label="Play",
                           method="animate",
                           # redraw must be true for bar plots
-                          args=[None, {"frame": {"duration": self.duration, "redraw": True},
+                          args=[None, {"frame": {"duration": self.duration, "redraw": False},
                                         "fromcurrent": True,
                                         "mode": "immediate",
-                                        "transition": {"duration": self.duration}
+                                        "transition": {"duration": self.duration, "easing": "linear"}
                                     }]),
                      dict(label="Pause",
                           method="animate",
@@ -601,10 +653,10 @@ class _BarChartRace:
                             "visible": False, # just repeats period label
                             # "xanchor": "right"
                         },
-                        "transition": {"duration": self.duration, "easing": "cubic-in-out"},
+                        "transition": {"duration": self.duration, "easing": "cubic-in-out"}, #transition duration must be set at least as long as frame duration
                         "pad": {"b": 10, "t": 50},
-                        "len": 0.88,
-                        "x": 0.05,
+                        "len": 1,
+                        "x": 0,
                         "y": 0,
                         "steps": slider_steps
                     }
@@ -612,13 +664,13 @@ class _BarChartRace:
             layout.sliders = [sliders_dict]
 
         fig = go.Figure(data=data, layout=layout, frames=frames[1:])
-        if self.filename:
-            fig.write_html(self.filename, **self.write_html_kwargs)
+        if self.out_filename:
+            fig.write_html(self.out_filename, **self.write_html_kwargs)
         else:
             return fig
 
 
-def bar_chart_race_plotly(filename=None, orientation='h', sort='desc', n_bars=None, 
+def bar_chart_race_plotly(data_filename=None, data_is_wide=False, out_filename=None, orientation='h', sort='desc', n_bars=None, 
                           fixed_order=False, fixed_max=False, steps_per_period=10, 
                           period_length=500, end_period_pause=0, interpolate_period=True, 
                           period_label=True, period_template=None, period_summary_func=None, 
@@ -626,7 +678,7 @@ def bar_chart_race_plotly(filename=None, orientation='h', sort='desc', n_bars=No
                           bar_textposition='outside', bar_texttemplate=None, bar_label_font=None, 
                           tick_label_font=None, hovertemplate=None, slider=True, scale='linear', 
                           bar_kwargs=None, layout_kwargs=None, write_html_kwargs=None, 
-                          filter_column_colors=False, autorange_vals = False, val_ax_label=None):
+                          filter_column_colors=False, fixed_xaxis = False, val_ax_label=None, scatter_labels=True, frame_subset=None):
     '''
     Create an animated bar chart race using Plotly. Data must be in 
     'wide' format where each row represents a single time period and each 
@@ -925,10 +977,10 @@ def bar_chart_race_plotly(filename=None, orientation='h', sort='desc', n_bars=No
         write_html_kwargs=None,
         filter_column_colors=False)        
     '''
-    bcr = _BarChartRace(filename, orientation, sort, n_bars, fixed_order, fixed_max,
+    bcr = _BarChartRace(data_filename, data_is_wide, out_filename, orientation, sort, n_bars, fixed_order, fixed_max,
                         steps_per_period, period_length, end_period_pause, interpolate_period, 
                         period_label, period_template, period_summary_func, perpendicular_bar_func, 
                         title, bar_size, bar_textposition, bar_texttemplate, bar_label_font, 
                         tick_label_font, hovertemplate, slider, scale, bar_kwargs, layout_kwargs, 
-                        write_html_kwargs, filter_column_colors, autorange_vals, val_ax_label)
+                        write_html_kwargs, filter_column_colors, fixed_xaxis, val_ax_label, scatter_labels, frame_subset)
     return bcr
