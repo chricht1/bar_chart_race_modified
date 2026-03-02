@@ -451,12 +451,12 @@ class _BarChartRace:
                     "label": self.get_period_label_text(i),
                     "method": "animate"
                 })
-            title_text = f'Locally enriched pathways per sliding window position'# {i/self.steps_per_period}'
+            title_text = f'Locally enriched pathways per sliding window position {i/self.steps_per_period}'
 
             # Use go.Layout with title_text (canonical) so animations pick it up
             frame_layout = go.Layout(
                 xaxis = xaxis,
-                yaxis = label_axis, annotations=annotations,
+                yaxis = label_axis, #annotations=annotations,
                 autosize=False, width=1000, height=800,
                 #margin = self.layout_kwargs.get('margin', {'l':150, 'r':80, 't':100, 'b':120}),
                 title_text = title_text,
@@ -498,9 +498,9 @@ class _BarChartRace:
             #text = self.bar_text,
             #textposition=self.bar_textposition,
             hoverinfo='all',
-            texttemplate='%{y}<br>%{x:.4s}',#self.bar_texttemplate,
+            texttemplate='%{y} %{x:.4s}',#self.bar_texttemplate,
             textangle=0,            
-            textposition='outside',
+            textposition='auto',#outside',
             orientation=self.orientation,
             marker_color=colors,
             cliponaxis=False,
