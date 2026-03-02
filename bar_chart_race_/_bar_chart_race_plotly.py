@@ -463,7 +463,7 @@ class _BarChartRace:
                                 {"frame": {"duration": self.duration, "redraw": False},
                                  "mode": "immediate",
                                  "fromcurrent": True,
-                                 "transition": {"duration": self.duration}
+                                 "transition": {"duration": 0}#self.duration}
                                 }],
                             "label": self.get_period_label_text(i), 
                             "method": "animate"})
@@ -504,7 +504,7 @@ class _BarChartRace:
             #customdata=self.bar_customdata,
             #text = self.bar_text,
             textposition=self.bar_textposition,
-            texttemplate=self.bar_texttemplate,
+            texttemplate='%{y}<br>%{x:.4s}',#self.bar_texttemplate,
             orientation=self.orientation,
             marker_color=colors,
             cliponaxis=False,
@@ -630,10 +630,10 @@ class _BarChartRace:
             buttons=[dict(label="Play",
                           method="animate",
                           # redraw must be true for bar plots
-                          args=[None, {"frame": {"duration": self.duration, "redraw": False},
+                          args=[None, {"frame": {"duration": 500, "redraw": False},#{"duration": self.duration, "redraw": False},
                                         "fromcurrent": True,
                                         "mode": "immediate",
-                                        "transition": {"duration": self.duration, "easing": "linear"}
+                                        "transition": {"duration": 300, "easing": "quadratic-in-out"}#{"duration": 0, "easing": "linear"}
                                     }]),
                      dict(label="Pause",
                           method="animate",
