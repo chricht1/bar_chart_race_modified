@@ -329,24 +329,21 @@ class _BarChartRace:
         df_wide = df_wide.reindex(new_index)
 
         df_wide_interp = df_wide.interpolate()
-        df_wide_interp.to_csv('df_wide_interp.csv')
         topN = np.sort(df_wide_interp.to_numpy(), axis=1)[:, -self.n_bars:][:, ::-1]
 
         df_vals = pd.DataFrame(topN, index=df_wide_interp.index, columns=range(1, self.n_bars + 1))
-        df_vals.to_csv('df_vals_interp.csv')
 
         # get a dataframe with label (pathway) indices ranked after their value in each window
-        df_ranks_wide = df_wide_interp.rank(axis=1, method='first', ascending=True)
+        df_ranks_wide = df_wide_interp.rank(axis=1, method='first', ascending=False)
         #df_ranks_wide = df_ranks_wide - (len(df_ranks_wide.columns)-self.n_bars)
         #print(df_ranks_wide.head(2))
         #df_ranks_wide[df_ranks_wide < 1] = np.nan
-        df_ranks_wide.to_csv('df_ranks_wide.csv')
         df_ranks_wide[df_ranks_wide > self.n_bars] = np.nan
         ser = df_ranks_wide.stack().reset_index()
 
         df_ser = pd.DataFrame(ser).astype('int32')
-        print(df_ser.head(3))
-        df_ranks = df_ser.pivot(index='window', columns=0, values='pathway.idx')
+
+        df_ranks = df_ser.pivot(index='window', columns=0, values='level_1')
         return df_vals, df_ranks, pw_names
 
 
@@ -431,7 +428,7 @@ class _BarChartRace:
             label_axis = dict()#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
                             # tickfont=self.tick_label_font)
 
-            label_axis['range'] = self.ylimit if self.orientation == 'h' else self.xlimit
+            #label_axis['range'] = self.ylimit if self.orientation == 'h' else self.xlimit
             if self.orientation == 'v':
                 label_axis['tickangle'] = -90
 
@@ -441,25 +438,33 @@ class _BarChartRace:
             xaxis, yaxis = (value_axis, label_axis) if self.orientation == 'h' \
                              else (label_axis, value_axis)
             
-            #annotations = self.get_annotations(i) 
+            annotations = self.get_annotations(i) 
+            frame_name = str(i)
             if self.slider and i % self.steps_per_period == 0:
-                slider_steps.append(
-                            {"args": [[i],
-                                {"frame": {"duration": self.duration, "redraw": False},
-                                 "mode": "immediate",
-                                 "fromcurrent": True,
-                                 "transition": {"duration": 0}#self.duration}
-                                }],
-                            "label": self.get_period_label_text(i), 
-                            "method": "animate"})
-            title = {'text': f'Locally enriched pathways per sliding window position {i/self.steps_per_period}',
-                            'x': 0.5, 'xref': 'paper', 'xanchor': 'center', 'yanchor': 'top'}
-            layout = go.Layout(xaxis=xaxis, yaxis=yaxis, #annotations=annotations,
-                                autosize=False, width=1000, height=800, #margin={'l': 150}, 
-                                title=title, 
-                                **self.layout_kwargs)
+                slider_steps.append({
+                    "args": [[frame_name],
+                            {"frame": {"duration": self.duration, "redraw": False},
+                            "mode": "immediate",
+                            "fromcurrent": True,
+                            "transition": {"duration": 0}
+                            }],
+                    "label": self.get_period_label_text(i),
+                    "method": "animate"
+                })
+            title_text = f'Locally enriched pathways per sliding window position'# {i/self.steps_per_period}'
 
-            frames.append(go.Frame(data=data, layout=layout, name=i))
+            # Use go.Layout with title_text (canonical) so animations pick it up
+            frame_layout = go.Layout(
+                xaxis = xaxis,
+                yaxis = label_axis, annotations=annotations,
+                autosize=False, width=1000, height=800,
+                #margin = self.layout_kwargs.get('margin', {'l':150, 'r':80, 't':100, 'b':120}),
+                title_text = title_text,
+                **self.layout_kwargs
+            )
+
+            # name must be a string and slider steps must match the same string
+            frames.append(go.Frame(data=data, layout=frame_layout, name=frame_name))
 
         return frames, slider_steps
     
@@ -493,7 +498,7 @@ class _BarChartRace:
             #text = self.bar_text,
             #textposition=self.bar_textposition,
             hoverinfo='all',
-            texttemplate='%{y} %{x:.4s}',#self.bar_texttemplate,
+            texttemplate='%{y}<br>%{x:.4s}',#self.bar_texttemplate,
             textangle=0,            
             textposition='outside',
             orientation=self.orientation,
@@ -634,7 +639,7 @@ class _BarChartRace:
         if self.slider:
             layout.sliders = [sliders_dict]
 
-        fig = go.Figure(data=data, layout=layout, frames=frames[1:])
+        fig = go.Figure(data=data, layout=layout, frames=frames)
         fig.update_yaxes(title_text = f'Top {self.n_bars} pathways', visible = True, showticklabels= False)
         if self.out_filename:
             fig.write_html(self.out_filename, **self.write_html_kwargs)
