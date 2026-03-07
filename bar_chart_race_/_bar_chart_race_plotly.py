@@ -1,16 +1,11 @@
-import warnings
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly
 import os
 from tqdm import tqdm
-import colorsys
-import math
-import re
 
-from ._utils import prepare_wide_data
+from .utils import color_generation
+
 
 
 class _BarChartRace:
@@ -24,8 +19,9 @@ class _BarChartRace:
                           write_html_kwargs=None,
                           fixed_xaxis = False, plot_pws_yaxis=False, val_ax_label=None, 
                           scatter_labels=False, scatter_values_inside_bar=False, linebreak_labels=False, 
-                          labels_max_len=None, linebreak_labels_len_greater=None, frame_subset=None,
-                          plot_labels_over_bars=False, bargap=None, yaxis_title_standoff=30):
+                          labels_max_len=None, linebreak_labels_len_greater=None, 
+                          plot_labels_over_bars=False, bargap=None, yaxis_title_standoff=30, 
+                          bar_switching_anim=False, frame_subset=None):
         
         self.data_filename = data_filename
         self.data_is_wide = data_is_wide
@@ -70,7 +66,7 @@ class _BarChartRace:
         self.validate_params()
         self.df_vals, self.df_ranks, self.pw_names = self.get_plot_data()
         #self.col_filt = self.get_col_filt()
-        self.pw_colors, pw_color_is_dark = self.generate_large_palette(len(self.pw_names))
+        self.pw_colors, pw_color_is_dark = color_generation.generate_large_palette(len(self.pw_names))
         self.str_index = self.df_vals.index.astype('str')
 
         self.bar_customdata = None
@@ -78,6 +74,26 @@ class _BarChartRace:
         self.insidetextfont = self.bar_label_font
         self.inside_label_font_colors = np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
         self.outside_label_font = {**self.bar_label_font, "color": "#696969"}#"#2a2a2a"}
+
+        self.bar_switching_anim = bar_switching_anim
+        self.slider_step_dict, self.play_args = self.get_animation_opts()
+
+    def get_animation_opts(self):
+        slider_step_dict = {"frame": {"duration": self.duration, "redraw": False},
+                            "mode": "immediate"}
+        play_args = [None, {"frame": {"duration": self.duration},
+                            "fromcurrent": True}]
+        if self.bar_switching_anim:
+            self.redraw = True
+            slider_step_dict["fromcurrent"] = True,
+            slider_step_dict["transition"] = {"duration": self.duration}
+    
+        else:
+            self.redraw = False
+            play_args[1]["transition"] = {"duration": self.duration,
+                                        "easing": "linear"}
+        play_args[1]["frame"]["redraw"] = self.redraw
+        return slider_step_dict, play_args
 
 
     def get_label_lens(self):
@@ -94,12 +110,23 @@ class _BarChartRace:
 
     def get_glob_max_needed_xaxis_len(self):
         label_lens_of_bars = self.label_lens[self.df_ranks.to_numpy().T]
+        bar_lens = self.df_vals.to_numpy().T
 
         if self.plot_labels_over_bars:
-            max_len = np.max(np.concatenate((self.df_vals.to_numpy().T, label_lens_of_bars)))
+            max_bar_len = bar_lens.max()
+            max_label_len = label_lens_of_bars.max()
+            if not(self.scatter_values_inside_bar) and self.bar_textposition == 'outside':
+                max_bar_len_idx = bar_lens.argmax()
+                max_bar_len += bar_lens.flatten()[max_bar_len_idx]/4 + 1 + 0.5  # 0.5 for float formatting with two decimal places
+                                                                                # needs to be handled better!
+                total_lens = max(max_bar_len, max_label_len)
         else:    
-            total_lens = self.df_vals.to_numpy().T + label_lens_of_bars
+            total_lens = bar_lens + label_lens_of_bars
             max_len = total_lens.max()
+            if not(self.scatter_values_inside_bar) and self.bar_textposition == 'outside':
+                max_idx = total_lens.argmax() 
+                max_len += total_lens.flatten()[max_idx]/4 + 1
+
         return max_len
 
     def get_bargap(self, bargap):
@@ -248,7 +275,6 @@ class _BarChartRace:
 
     def get_plot_data(self):
         df_wide, pw_names = self.get_wide_df_and_lut()
-
         if self.n_bars is None:
             self.n_bars = len(df_wide.iloc[0].values)
         else: 
@@ -259,11 +285,11 @@ class _BarChartRace:
             df_wide_idx -= 1
 
         df_wide.index = df_wide_idx * self.steps_per_period
-        df_wide_idx = range(df_wide_idx[-1]+1)
+        df_wide_idx = range(df_wide.index[-1]+1)
         df_wide = df_wide.reindex(df_wide_idx)
 
         df_wide_interp = df_wide.interpolate()
-
+        df_wide_interp.to_csv('df_wide_interp.csv')
         # sort dataframe asc as matrix, grab n largest columns and reverse them
         top_n = np.sort(df_wide_interp.to_numpy(), axis=1)[:, -self.n_bars:][:, ::-1]
 
@@ -279,58 +305,6 @@ class _BarChartRace:
         df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
 
         return df_vals, df_ranks, pw_names
-
-
-
-    def _rgb_to_hex(self, r, g, b):
-        return "#{:02X}{:02X}{:02X}".format(int(r * 255), int(g * 255), int(b * 255))
-
-
-    def generate_large_palette(self, n,
-                            sat_values=(0.9, 0.7, 0.55),
-                            val_values=(0.95, 0.78),
-                            hue_spacing_strategy='even'):
-        """
-        Generate n distinct colors by combining several saturation/value variations
-        with a set of evenly spaced hues.
-        - sat_values: tuple of saturation levels to use (0..1)
-        - val_values: tuple of value/brightness levels to use (0..1)
-        - hue_spacing_strategy: 'even' or 'golden' (golden reduces perceptual clustering)
-        Returns list of hex strings length n.
-        """
-        variations = [(s, v) for v in val_values for s in sat_values]
-        per_hue = len(variations)
-        num_hues = math.ceil(n / per_hue)
-
-        # generate hue list
-        hues = []
-        if hue_spacing_strategy == 'golden':
-            golden = 0.618033988749895
-            h = 0.0
-            for i in range(num_hues):
-                hues.append(h % 1.0)
-                h += golden
-        else:  # evenly spaced
-            for i in range(num_hues):
-                hues.append(i / float(num_hues))
-
-        # interleave variations to avoid adjacent very-similar colors
-        colors = []
-        is_dark = []
-        for i, h in enumerate(hues):
-            # For variety, rotate variation order every hue
-            for j in range(per_hue):
-                s, v = variations[(j + i) % per_hue]
-                r, g, b = colorsys.hsv_to_rgb(h, s, v)
-                colors.append(self._rgb_to_hex(r, g, b))
-                is_dark.append(np.sum(np.array([r, g, b])*256 * np.array([299, 587, 114]))/1000 < 123) 
-                # estimate perceived brightness of color for 
-                #https://stackoverflow.com/questions/49437263/contrast-between-label-and-background-determine-if-color-is-light-or-dark
-                if len(colors) == n:
-                    perm = np.random.permutation(np.array(range(n)))
-                    colors = np.array(colors)[perm]
-                    is_dark = np.array(is_dark)[perm]
-                    return colors, is_dark
 
 
     def get_frames(self):
@@ -363,15 +337,10 @@ class _BarChartRace:
             )
             
             frame_name = str(i)
-
-            frame_name = str(i)
             if self.slider and i % self.steps_per_period == 0:
                 slider_steps.append({
                     "args": [[frame_name],
-                            {"frame": {"duration": self.duration/self.steps_per_period, "redraw": False},
-                            "mode": "immediate",
-                            # "transition": {"duration": self.duration/self.steps_per_period}
-                            }],
+                            self.slider_step_dict],
                     "label": frame_name,
                     "method": "animate"
                 })
@@ -397,13 +366,22 @@ class _BarChartRace:
     
 
     def get_data(self, i, bar_vals):
+
         label_ids = self.df_ranks[self.df_ranks.index==i].values[0]
-        label_ids_rev = np.flip(label_ids)
         bar_vals_rev = np.flip(bar_vals)
-        x = pd.Series(bar_vals_rev, index=label_ids_rev)
-        x.replace(0, np.nan, inplace=True)
-        label_names = np.flip(self.pw_names[label_ids])
-        y = pd.Series(label_names, index = label_ids_rev)
+        label_ids_rev = np.flip(label_ids)
+        label_names = None
+
+        if self.bar_switching_anim:
+            x = bar_vals_rev
+            x[x==0] = np.nan
+        else:
+            x = pd.Series(bar_vals_rev, index=label_ids_rev)
+            x.replace(0, np.nan, inplace=True)
+            #y = pd.Series(label_names, index = label_ids_rev)
+        
+        label_names = np.flip(self.pw_names[label_ids])          
+
         colors = self.pw_colors[label_ids_rev]
 
         if not(self.fixed_xaxis):
@@ -414,15 +392,18 @@ class _BarChartRace:
             for j in range(1, self.n_bars + 1):
                 if j % 5 == 0:
                     annotations.append(dict(
-                        x=0, y=j-1, # <-- FIX: map to number instead of string
+                        x=0, y=j-1,
                         xref="paper", yref="y",
                         text=str(j), showarrow=False,
                         xanchor="right", align="right"
                     ))
- 
+
+        #print('x: ', x)
+        #print('y: ', self.y_coords)
+
         bar = go.Bar(
             x=x, 
-            y=self.y_coords, # <-- FIX: Use numbers instead of strings
+            y=self.y_coords,
             textposition=self.bar_textposition,
             hoverinfo='all',
             texttemplate=self.bar_texttemplate,
@@ -480,17 +461,7 @@ class _BarChartRace:
             yanchor='bottom',
             buttons=[dict(label="Play",
                           method="animate",
-                          # redraw must be true for bar plots
-                          args=[None, {"frame": {"duration": self.duration/self.steps_per_period, "redraw": False},
-                                        "fromcurrent": True, 
-                                        "transition": {"duration": self.duration/self.steps_per_period,
-                                                        "easing": "linear"
-                                                                            }}]
-                                # [None, {"frame": {"duration": self.duration, "redraw": True},
-                                #         "fromcurrent": True, "mode": "immediate",
-                                #         "transition": {"duration": self.duration, "easing": "linear"}
-                                #     }]
-                    ),
+                          args= self.play_args),
                      dict(label="Pause",
                           method="animate",
                           args=[[None], {"frame": {"duration": 0, "redraw": False},
@@ -510,7 +481,7 @@ class _BarChartRace:
                             "xanchor": "right"
                         },
                         #"fromcurrent": True,
-                        "transition": {"duration": self.duration/self.steps_per_period, "easing": "linear"},#transition duration must be set at least as long as frame duration
+                        "transition": {"duration": self.duration, "easing": "cubic-in-out"},#transition duration must be set at least as long as frame duration
                         "pad": {"b": 10, "t": 50},
                         "len": 1,
                         "x": 0,
