@@ -346,22 +346,11 @@ class _BarChartRace:
         for i in tqdm(range(len(self.df_vals[:self.frame_subset])), 'creating frames'):
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
 
-            data, annotations, current_label_ids, current_labels = self.get_data(i, bar_vals)
+            data, annotations, label_axis = self.get_data(i, bar_vals)
 
             value_axis = dict(showgrid=True, type=self.scale, title=self.val_ax_label, range=self.val_ax_range)
             #if self.bar_switching_anim:
             #    tickvals = np.arange(self.n_bars)
-            print(current_label_ids)
-            print(current_labels)
-            label_axis = dict(
-                title_text = f'Top {self.n_bars} pathways', 
-                title_standoff=self.yaxis_title_standoff,
-                showticklabels=self.plot_pws_yaxis,
-                tickmode='array',
-                tickvals=current_label_ids,
-                ticktext=current_labels,
-                range=[-self.bar_size / 2, self.n_bars - 1 + self.bar_size / 2 + self.bargap]
-            )
             
             frame_name = str(i)
             if self.slider and i % self.steps_per_period == 0:
@@ -389,24 +378,36 @@ class _BarChartRace:
     def get_data(self, i, bar_vals):
 
         label_ids = self.df_ranks[self.df_ranks.index==i].values[0]
+    
+        # Flip them because Plotly plots from bottom to top on the Y-axis
         bar_vals_rev = np.flip(bar_vals)
         label_ids_rev = np.flip(label_ids)
         label_names = np.flip(np.array(self.pw_names[label_ids]))     
-        y = self.y_coords.copy()
         
-        x = bar_vals_rev
-        label_ids_rev_subset = label_ids_rev.copy().astype(np.float64)
-        label_ids_rev_subset[x==0] = np.nan
-        #label_names[x==0] = ''
-        y[x==0] = np.nan
-        if self.bar_switching_anim:            
-            
-            x[x==0] = np.nan           
-            
-        else:
-            x = pd.Series(bar_vals_rev, index=label_ids_rev)
-            x.replace(0, np.nan, inplace=True)
-            y = pd.Series(label_names, index = label_ids_rev)    
+        # Use the static y_coords (0, 1, 2... n_bars-1)
+        y = np.arange(self.n_bars)
+        x = bar_vals_rev.copy()
+
+        # If you want to hide bars with 0 value but keep the label slot:
+        # Do NOT set y[x==0] = np.nan. Instead, just let x be 0 or NaN.
+        # Setting x to NaN hides the bar; setting it to 0 shows a sliver.
+        x_for_plot = np.where(x == 0, np.nan, x)
+        yaxis_locs = np.where(x == 0, np.nan, y)
+        #label_axis_vals = np.where(x == 0, ' ', label_names)
+
+        # label_ids_rev_subset = label_ids_rev.copy().astype(np.float64)
+        # label_ids_rev_subset[bar_vals_rev==0] = np.nan
+        # label_axis_vals = label_names
+        # label_axis_vals[bar_vals_rev==0] = ' '
+        # label_axis_vals = pd.Series(label_axis_vals, index=self.y_coords)
+        # #y[x==0] = np.nan
+        
+        # label_axis_locs = self.y_coords#np.arange(self.n_bars-1, -1, -1)#
+        # #label_axis_locs[bar_vals_rev == 0] = np.nan
+
+        # x = pd.Series(bar_vals_rev, index=label_ids_rev)
+        # x.replace(0, np.nan, inplace=True)
+        # y = pd.Series(label_names, index = label_ids_rev_subset)    
 
         colors = self.pw_colors[label_ids_rev]
 
@@ -424,22 +425,34 @@ class _BarChartRace:
                         xanchor="right", align="right"
                     ))
         print(i)
-        #print('x: ', x)
-        #print('y: ', y)
+        print('x: ', x)
+        print('y: ', y)
         print()
 
         bar = go.Bar(
-            x=x, 
+            x=x_for_plot, 
             y=y,
             textposition=self.bar_textposition,
             hoverinfo='all',
             texttemplate=self.bar_texttemplate,
-            textangle=0,            
+            #textangle=0,            
             orientation='h',
             marker_color=colors,
             cliponaxis=False,
             showlegend=False,
         )    
+        
+        #print('current_label_ids:', )
+        #print('current_labels: ', current_labels)
+        label_axis = dict(
+            title_text = f'Top {self.n_bars} pathways', 
+            title_standoff=self.yaxis_title_standoff,
+            showticklabels=self.plot_pws_yaxis,
+            tickmode='array',
+            tickvals=yaxis_locs,
+            ticktext=label_names,
+            range=[-self.bar_size / 2, self.n_bars - 1 + self.bar_size / 2 + self.bargap]
+        )
 
         if self.scatter_values_inside_bar:
             inside_label_font = {"color": self.inside_label_font_colors[label_ids_rev]}
@@ -455,7 +468,7 @@ class _BarChartRace:
                 hoverinfo="skip",
                 showlegend=False
             )
-            return [bar, scatter], annotations, label_ids_rev, label_names
+            return [bar, scatter], annotations, label_axis
 
         if self.plot_labels_over_bars:
             x_ = np.zeros(self.n_bars)
@@ -470,9 +483,9 @@ class _BarChartRace:
                 hoverinfo="skip",
                 showlegend=False
             )
-            return [bar, scatter], annotations, y, label_names
+            return [bar, scatter], annotations, label_axis
 
-        return [bar], annotations, y, label_names
+        return [bar], annotations, label_axis
 
     
     def make_animation(self):
