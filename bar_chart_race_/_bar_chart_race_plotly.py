@@ -49,12 +49,8 @@ class _BarChartRace:
         self.plot_labels_over_bars = plot_labels_over_bars
         self.bargap = self.get_bargap(bargap)
         
-        self.yaxis_title_standoff = yaxis_title_standoff
-        self.scatter_values_inside_bar = scatter_values_inside_bar
         self.linebreak_labels = linebreak_labels
         self.labels_max_len = labels_max_len
-        self.linebreak_labels_len_greater = linebreak_labels_len_greater
-
         self.linebreak_labels_len_greater = linebreak_labels_len_greater
 
         #self.title = self.get_title(title)
@@ -79,7 +75,6 @@ class _BarChartRace:
         self.bar_customdata = None
         self.bar_text = None
         self.insidetextfont = self.bar_label_font
-        self.inside_label_font_colors = np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
         self.inside_label_font_colors = np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
         self.outside_label_font = {**self.bar_label_font, "color": "#696969"}#"#2a2a2a"}
 
@@ -150,13 +145,10 @@ class _BarChartRace:
         if bar_texttemplate is None:
             if self.scatter_labels or self.plot_pws_yaxis or self.plot_labels_over_bars:
                 self.scatter_values_inside_bar = False
-            if self.scatter_labels or self.plot_pws_yaxis or self.plot_labels_over_bars:
-                self.scatter_values_inside_bar = False
                 bar_texttemplate = '%{x:,.2f}'
             elif self.scatter_values_inside_bar:
                 bar_texttemplate = '%{y}'
             else:
-                bar_texttemplate = '%{y} %{x:.2f}'
                 bar_texttemplate = '%{y} %{x:.2f}'
         return bar_texttemplate
 
@@ -266,7 +258,6 @@ class _BarChartRace:
             self.mod_pw_data(pw_names)
         else: 
             self.pw_data_fpath = './data/pathway_data.csv'
-            self.pw_data_fpath = './data/pathway_data.csv'
             df, pw_names = self.create_pw_df_and_pw_names(self.pw_data_fpath)
             with open(os.path.join(os.path.dirname(self.pw_data_fpath),'pathway_names_orig.txt'), 'w') as f:
                 for pw in pw_names: f.write(pw+'\n')
@@ -326,7 +317,6 @@ class _BarChartRace:
             self.n_bars = len(df_wide.iloc[0].values)
         else: 
             self.n_bars = min(self.n_bars, len(df_wide.iloc[0].values))
-            self.n_bars = min(self.n_bars, len(df_wide.iloc[0].values))
 
         df_wide_idx = df_wide.index
         if df_wide.index[0] == 1:
@@ -352,7 +342,6 @@ class _BarChartRace:
 
         df_ser = pd.DataFrame(ser).astype('int32')
         df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
-        df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
 
         return df_vals, df_ranks, pw_names
 
@@ -367,7 +356,6 @@ class _BarChartRace:
         self.get_label_lens()
         self.get_label_lens()
         if self.fixed_xaxis:
-            self.val_ax_range = [0, self.get_glob_max_needed_xaxis_len()]
             self.val_ax_range = [0, self.get_glob_max_needed_xaxis_len()]
 
 
@@ -398,12 +386,6 @@ class _BarChartRace:
                     "label": frame_name,
                     "method": "animate"
                 })
-
-            title_text = f'Locally enriched pathways per sliding window position'
-            title = {'text': title_text,
-                     'font': {'size': 20},
-                    'x': 0.5, 'xref': 'paper',
-                    'xanchor': 'center', 'yanchor': 'top'}
             
             title_text = f'Locally enriched pathways per sliding window position'
             title = {'text': title_text,
@@ -418,14 +400,8 @@ class _BarChartRace:
                 autosize=False, width=1000, height=800+self.n_bars*10,
                 title = title,
                 bargap = self.bargap,
-                yaxis = label_axis,
-                annotations = annotations,
-                autosize=False, width=1000, height=800+self.n_bars*10,
-                title = title,
-                bargap = self.bargap,
             )
 
-            frames.append(go.Frame(data=data, layout=frame_layout, name=frame_name))
             frames.append(go.Frame(data=data, layout=frame_layout, name=frame_name))
 
         return frames, slider_steps
