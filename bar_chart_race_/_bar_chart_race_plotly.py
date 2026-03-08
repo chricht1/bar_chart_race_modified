@@ -46,8 +46,15 @@ class _BarChartRace:
         
         self.yaxis_title_standoff = yaxis_title_standoff
         self.scatter_values_inside_bar = scatter_values_inside_bar
+        self.plot_labels_over_bars = plot_labels_over_bars
+        self.bargap = self.get_bargap(bargap)
+        
+        self.yaxis_title_standoff = yaxis_title_standoff
+        self.scatter_values_inside_bar = scatter_values_inside_bar
         self.linebreak_labels = linebreak_labels
         self.labels_max_len = labels_max_len
+        self.linebreak_labels_len_greater = linebreak_labels_len_greater
+
         self.linebreak_labels_len_greater = linebreak_labels_len_greater
 
         #self.title = self.get_title(title)
@@ -72,6 +79,7 @@ class _BarChartRace:
         self.bar_customdata = None
         self.bar_text = None
         self.insidetextfont = self.bar_label_font
+        self.inside_label_font_colors = np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
         self.inside_label_font_colors = np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
         self.outside_label_font = {**self.bar_label_font, "color": "#696969"}#"#2a2a2a"}
 
@@ -142,10 +150,14 @@ class _BarChartRace:
         if bar_texttemplate is None:
             if self.scatter_labels or self.plot_pws_yaxis or self.plot_labels_over_bars:
                 self.scatter_values_inside_bar = False
+            if self.scatter_labels or self.plot_pws_yaxis or self.plot_labels_over_bars:
+                self.scatter_values_inside_bar = False
                 bar_texttemplate = '%{x:,.2f}'
+            elif self.scatter_values_inside_bar:
             elif self.scatter_values_inside_bar:
                 bar_texttemplate = '%{y}'
             else:
+                bar_texttemplate = '%{y} %{x:.2f}'
                 bar_texttemplate = '%{y} %{x:.2f}'
         return bar_texttemplate
 
@@ -154,6 +166,7 @@ class _BarChartRace:
         if scatter_texttemplate is None:
             scatter_texttemplate = "%{customdata}"
         return scatter_texttemplate
+    
     
 
     def validate_params(self):
@@ -195,7 +208,34 @@ class _BarChartRace:
 
     def get_wide_df_and_lut(self):
         data_dir = './data'
+        data_dir = './data'
         if self.data_filename is None:
+            self.data_filename = 'pathway_data_wide.csv'
+        self.data_fpath = os.path.join(data_dir,self.data_filename)
+
+        if self.data_filename == 'covid19.csv':
+            df_wide = pd.read_csv(self.data_fpath, index_col='date')
+            df_wide = df_wide.fillna(0)
+            df_wide.index = range(len(df_wide.index))
+            countries = df_wide.columns
+            df_wide.columns = [i for i in range(len(countries))]
+            return df_wide, countries
+        
+        if self.data_filename == 'FAOSTAT_data.csv':
+            df = pd.read_csv(self.data_fpath, index_col='Year')
+            df.sort_index(inplace=True)
+            items = df['Item'].unique()
+            item_idx_map = {name: i for i, name in enumerate(items)}
+            df["Item Index"] = df["Item"].map(item_idx_map)
+
+            df.drop(df.columns.difference(['Item Index','Value']), axis=1, inplace=True)
+            df_wide = pd.pivot_table(df, values='Value', index='Year', columns='Item Index')
+            df_wide = df_wide.fillna(0)
+            df_wide.index = range(len(df_wide.index))
+            return df_wide, items
+        
+        if os.path.exists(self.data_fpath) and os.path.exists('./data/pathway_names.txt'):
+            df_wide = pd.read_csv(self.data_fpath, index_col='window')
             self.data_filename = 'pathway_data_wide.csv'
         self.data_fpath = os.path.join(data_dir,self.data_filename)
 
@@ -227,7 +267,11 @@ class _BarChartRace:
             self.mod_pw_data(pw_names)
         else: 
             self.pw_data_fpath = './data/pathway_data.csv'
+            self.pw_data_fpath = './data/pathway_data.csv'
             df, pw_names = self.create_pw_df_and_pw_names(self.pw_data_fpath)
+            with open(os.path.join(os.path.dirname(self.pw_data_fpath),'pathway_names_orig.txt'), 'w') as f:
+                for pw in pw_names: f.write(pw+'\n')
+
             with open(os.path.join(os.path.dirname(self.pw_data_fpath),'pathway_names_orig.txt'), 'w') as f:
                 for pw in pw_names: f.write(pw+'\n')
 
@@ -235,6 +279,7 @@ class _BarChartRace:
             df_wide = df_wide.fillna(0)
             df_wide.to_csv(self.data_filename)
             self.mod_pw_data(pw_names)
+    
     
         return df_wide, pw_names
     
@@ -259,13 +304,21 @@ class _BarChartRace:
 
     def mod_pw_data(self, pw_names):
         if self.labels_max_len is not None and len(pw_names[0])!=self.labels_max_len:
+        if self.labels_max_len is not None and len(pw_names[0])!=self.labels_max_len:
             pw_names = self.get_orig_pw_names() 
             for i, pw in enumerate(pw_names):
                 pw_names[i] = self.shorten_pw_name(pw)
         if self.linebreak_labels is not None and pw_names[0].find('<br>') == -1:
+        if self.linebreak_labels is not None and pw_names[0].find('<br>') == -1:
             pw_names = self.get_orig_pw_names()
             for i, pw in enumerate(pw_names):
                 pw_names[i] = self.linebreak_pw_name(pw)
+        elif self.linebreak_labels_len_greater is not None: 
+            pw_names = self.get_orig_pw_names()
+            for i, pw in enumerate(pw_names):
+                if len(pw) > self.linebreak_labels_len_greater:
+                    pw_names[i] = self.linebreak_pw_name(pw)
+        return pw_names    
         elif self.linebreak_labels_len_greater is not None: 
             pw_names = self.get_orig_pw_names()
             for i, pw in enumerate(pw_names):
@@ -277,7 +330,9 @@ class _BarChartRace:
         df_wide, pw_names = self.get_wide_df_and_lut()
         if self.n_bars is None:
             self.n_bars = len(df_wide.iloc[0].values)
+            self.n_bars = len(df_wide.iloc[0].values)
         else: 
+            self.n_bars = min(self.n_bars, len(df_wide.iloc[0].values))
             self.n_bars = min(self.n_bars, len(df_wide.iloc[0].values))
 
         df_wide_idx = df_wide.index
@@ -298,10 +353,12 @@ class _BarChartRace:
         # get a dataframe with label (pathway) indices ranked after their value in each window
         df_ranks_wide = df_wide_interp.rank(axis=1, method='first', ascending=False)-1
 
+
         df_ranks_wide[df_ranks_wide > self.n_bars-1] = np.nan
         ser = df_ranks_wide.stack().reset_index()
 
         df_ser = pd.DataFrame(ser).astype('int32')
+        df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
         df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
 
         return df_vals, df_ranks, pw_names
@@ -312,14 +369,18 @@ class _BarChartRace:
         slider_steps = []
 
         self.y_coords = np.arange(self.n_bars)
+        self.y_coords = np.arange(self.n_bars)
 
         self.get_label_lens()
+        self.get_label_lens()
         if self.fixed_xaxis:
+            self.val_ax_range = [0, self.get_glob_max_needed_xaxis_len()]
             self.val_ax_range = [0, self.get_glob_max_needed_xaxis_len()]
 
 
         if self.frame_subset is None: self.frame_subset = len(self.df_vals)
         for i in tqdm(range(len(self.df_vals[:self.frame_subset])), 'creating frames'):
+            bar_vals = self.df_vals.iloc[i, :self.n_bars].values
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
 
             data, annotations, current_labels = self.get_data(i, bar_vals)
@@ -351,6 +412,12 @@ class _BarChartRace:
                     'x': 0.5, 'xref': 'paper',
                     'xanchor': 'center', 'yanchor': 'top'}
             
+            title_text = f'Locally enriched pathways per sliding window position'
+            title = {'text': title_text,
+                     'font': {'size': 20},
+                    'x': 0.5, 'xref': 'paper',
+                    'xanchor': 'center', 'yanchor': 'top'}
+            
             frame_layout = go.Layout(
                 xaxis = value_axis,
                 yaxis = label_axis,
@@ -358,8 +425,14 @@ class _BarChartRace:
                 autosize=False, width=1000, height=800+self.n_bars*10,
                 title = title,
                 bargap = self.bargap,
+                yaxis = label_axis,
+                annotations = annotations,
+                autosize=False, width=1000, height=800+self.n_bars*10,
+                title = title,
+                bargap = self.bargap,
             )
 
+            frames.append(go.Frame(data=data, layout=frame_layout, name=frame_name))
             frames.append(go.Frame(data=data, layout=frame_layout, name=frame_name))
 
         return frames, slider_steps
@@ -448,6 +521,43 @@ class _BarChartRace:
         return [bar], annotations, label_names
 
     
+            showlegend=False,
+        )    
+
+        if self.scatter_values_inside_bar:
+            inside_label_font = {"color": self.inside_label_font_colors[label_ids_rev]}
+
+            scatter = go.Scatter(
+                x=x, 
+                y=self.y_coords,
+                mode="text",
+                texttemplate="%{x:,.2f}  ",
+                textposition="middle left",
+                textfont=inside_label_font,
+                cliponaxis=False,
+                hoverinfo="skip",
+                showlegend=False
+            )
+            return [bar, scatter], annotations, label_names
+
+        if self.plot_labels_over_bars:
+            x_ = np.zeros(self.n_bars)
+            y_ = self.y_coords + 0.45
+            scatter = go.Scatter(
+                x=x_, y=y_,
+                customdata=label_names,
+                mode="text",
+                texttemplate="%{customdata}",
+                textposition="middle right",
+                cliponaxis=False,
+                hoverinfo="skip",
+                showlegend=False
+            )
+            return [bar, scatter], annotations, label_names
+
+        return [bar], annotations, label_names
+
+    
     def make_animation(self):
         frames, slider_steps = self.get_frames()
         data = frames[0].data
@@ -479,6 +589,10 @@ class _BarChartRace:
                             "prefix": "Position: ",
                             "visible": True,
                             "xanchor": "right"
+                            "font": {"size": 20},
+                            "prefix": "Position: ",
+                            "visible": True,
+                            "xanchor": "right"
                         },
                         #"fromcurrent": True,
                         "transition": {"duration": self.duration, "easing": "cubic-in-out"},#transition duration must be set at least as long as frame duration
@@ -496,3 +610,4 @@ class _BarChartRace:
             fig.write_html(self.out_filename, **self.write_html_kwargs)
         else:
             return fig
+
