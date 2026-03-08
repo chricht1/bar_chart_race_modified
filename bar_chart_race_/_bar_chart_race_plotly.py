@@ -154,7 +154,6 @@ class _BarChartRace:
                 self.scatter_values_inside_bar = False
                 bar_texttemplate = '%{x:,.2f}'
             elif self.scatter_values_inside_bar:
-            elif self.scatter_values_inside_bar:
                 bar_texttemplate = '%{y}'
             else:
                 bar_texttemplate = '%{y} %{x:.2f}'
@@ -304,12 +303,11 @@ class _BarChartRace:
 
     def mod_pw_data(self, pw_names):
         if self.labels_max_len is not None and len(pw_names[0])!=self.labels_max_len:
-        if self.labels_max_len is not None and len(pw_names[0])!=self.labels_max_len:
             pw_names = self.get_orig_pw_names() 
             for i, pw in enumerate(pw_names):
                 pw_names[i] = self.shorten_pw_name(pw)
         if self.linebreak_labels is not None and pw_names[0].find('<br>') == -1:
-        if self.linebreak_labels is not None and pw_names[0].find('<br>') == -1:
+
             pw_names = self.get_orig_pw_names()
             for i, pw in enumerate(pw_names):
                 pw_names[i] = self.linebreak_pw_name(pw)
@@ -319,12 +317,7 @@ class _BarChartRace:
                 if len(pw) > self.linebreak_labels_len_greater:
                     pw_names[i] = self.linebreak_pw_name(pw)
         return pw_names    
-        elif self.linebreak_labels_len_greater is not None: 
-            pw_names = self.get_orig_pw_names()
-            for i, pw in enumerate(pw_names):
-                if len(pw) > self.linebreak_labels_len_greater:
-                    pw_names[i] = self.linebreak_pw_name(pw)
-        return pw_names    
+    
 
     def get_plot_data(self):
         df_wide, pw_names = self.get_wide_df_and_lut()
@@ -521,43 +514,6 @@ class _BarChartRace:
         return [bar], annotations, label_names
 
     
-            showlegend=False,
-        )    
-
-        if self.scatter_values_inside_bar:
-            inside_label_font = {"color": self.inside_label_font_colors[label_ids_rev]}
-
-            scatter = go.Scatter(
-                x=x, 
-                y=self.y_coords,
-                mode="text",
-                texttemplate="%{x:,.2f}  ",
-                textposition="middle left",
-                textfont=inside_label_font,
-                cliponaxis=False,
-                hoverinfo="skip",
-                showlegend=False
-            )
-            return [bar, scatter], annotations, label_names
-
-        if self.plot_labels_over_bars:
-            x_ = np.zeros(self.n_bars)
-            y_ = self.y_coords + 0.45
-            scatter = go.Scatter(
-                x=x_, y=y_,
-                customdata=label_names,
-                mode="text",
-                texttemplate="%{customdata}",
-                textposition="middle right",
-                cliponaxis=False,
-                hoverinfo="skip",
-                showlegend=False
-            )
-            return [bar, scatter], annotations, label_names
-
-        return [bar], annotations, label_names
-
-    
     def make_animation(self):
         frames, slider_steps = self.get_frames()
         data = frames[0].data
@@ -585,10 +541,6 @@ class _BarChartRace:
                         "yanchor": "top",
                         "xanchor": "left",
                         "currentvalue": {
-                            "font": {"size": 20},
-                            "prefix": "Position: ",
-                            "visible": True,
-                            "xanchor": "right"
                             "font": {"size": 20},
                             "prefix": "Position: ",
                             "visible": True,
