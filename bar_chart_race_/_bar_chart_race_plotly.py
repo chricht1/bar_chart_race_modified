@@ -46,8 +46,6 @@ class _BarChartRace:
         
         self.yaxis_title_standoff = yaxis_title_standoff
         self.scatter_values_inside_bar = scatter_values_inside_bar
-        self.plot_labels_over_bars = plot_labels_over_bars
-        self.bargap = self.get_bargap(bargap)
         
         self.linebreak_labels = linebreak_labels
         self.labels_max_len = labels_max_len
@@ -64,7 +62,6 @@ class _BarChartRace:
         self.slider = slider
         self.scale = scale
         self.duration = self.period_length / steps_per_period
-        self.write_html_kwargs = write_html_kwargs or {}
         
         self.validate_params()
         self.df_vals, self.df_ranks, self.pw_names = self.get_plot_data()
@@ -79,24 +76,38 @@ class _BarChartRace:
         self.outside_label_font = {**self.bar_label_font, "color": "#696969"}#"#2a2a2a"}
 
         self.bar_switching_anim = bar_switching_anim
-        self.slider_step_dict, self.play_args = self.get_animation_opts()
+        self.slider_step_dict, self.play_btn_dict = self.get_animation_opts()
+        self.title, self.layout_height = self.get_layout_params()
+
 
     def get_animation_opts(self):
         slider_step_dict = {"frame": {"duration": self.duration, "redraw": False},
                             "mode": "immediate"}
-        play_args = [None, {"frame": {"duration": self.duration},
-                            "fromcurrent": True}]
+        play_btn_dict = {"frame": {"duration": self.duration},
+                            "fromcurrent": True}
         if self.bar_switching_anim:
             self.redraw = True
-            slider_step_dict["fromcurrent"] = True,
+            slider_step_dict["fromcurrent"] = True
             slider_step_dict["transition"] = {"duration": self.duration}
-    
         else:
             self.redraw = False
-            play_args[1]["transition"] = {"duration": self.duration,
+            play_btn_dict["transition"] = {"duration": self.duration,
                                         "easing": "linear"}
-        play_args[1]["frame"]["redraw"] = self.redraw
-        return slider_step_dict, play_args
+        play_btn_dict["frame"]["redraw"] = self.redraw
+        return slider_step_dict, play_btn_dict
+
+
+    def get_layout_params(self):
+        title_text = f'Locally enriched pathways per sliding window position'
+        title = {'text': title_text,
+                    'font': {'size': 20},
+                'x': 0.5, 'xref': 'paper',
+                'xanchor': 'center', 'yanchor': 'top'}
+        
+        layout_height = 800
+        if self.plot_labels_over_bars:
+            layout_height += self.n_bars*10
+        return title, layout_height
 
 
     def get_label_lens(self):
@@ -227,32 +238,6 @@ class _BarChartRace:
         
         if os.path.exists(self.data_fpath) and os.path.exists('./data/pathway_names.txt'):
             df_wide = pd.read_csv(self.data_fpath, index_col='window')
-            self.data_filename = 'pathway_data_wide.csv'
-        self.data_fpath = os.path.join(data_dir,self.data_filename)
-
-        if self.data_filename == 'covid19.csv':
-            df_wide = pd.read_csv(self.data_fpath, index_col='date')
-            df_wide = df_wide.fillna(0)
-            df_wide.index = range(len(df_wide.index))
-            countries = df_wide.columns
-            df_wide.columns = [i for i in range(len(countries))]
-            return df_wide, countries
-        
-        if self.data_filename == 'FAOSTAT_data.csv':
-            df = pd.read_csv(self.data_fpath, index_col='Year')
-            df.sort_index(inplace=True)
-            items = df['Item'].unique()
-            item_idx_map = {name: i for i, name in enumerate(items)}
-            df["Item Index"] = df["Item"].map(item_idx_map)
-
-            df.drop(df.columns.difference(['Item Index','Value']), axis=1, inplace=True)
-            df_wide = pd.pivot_table(df, values='Value', index='Year', columns='Item Index')
-            df_wide = df_wide.fillna(0)
-            df_wide.index = range(len(df_wide.index))
-            return df_wide, items
-        
-        if os.path.exists(self.data_fpath) and os.path.exists('./data/pathway_names.txt'):
-            df_wide = pd.read_csv(self.data_fpath, index_col='window')
             with open('./data/pathway_names.txt') as f:
                 pw_names = np.array(f.readlines())
             self.mod_pw_data(pw_names)
@@ -350,10 +335,8 @@ class _BarChartRace:
         frames = []
         slider_steps = []
 
-        self.y_coords = np.arange(self.n_bars)
-        self.y_coords = np.arange(self.n_bars)
+        self.y_coords = np.arange(self.n_bars).astype(np.float64)
 
-        self.get_label_lens()
         self.get_label_lens()
         if self.fixed_xaxis:
             self.val_ax_range = [0, self.get_glob_max_needed_xaxis_len()]
@@ -362,18 +345,20 @@ class _BarChartRace:
         if self.frame_subset is None: self.frame_subset = len(self.df_vals)
         for i in tqdm(range(len(self.df_vals[:self.frame_subset])), 'creating frames'):
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
-            bar_vals = self.df_vals.iloc[i, :self.n_bars].values
 
-            data, annotations, current_labels = self.get_data(i, bar_vals)
+            data, annotations, current_label_ids, current_labels = self.get_data(i, bar_vals)
 
             value_axis = dict(showgrid=True, type=self.scale, title=self.val_ax_label, range=self.val_ax_range)
-        
+            #if self.bar_switching_anim:
+            #    tickvals = np.arange(self.n_bars)
+            print(current_label_ids)
+            print(current_labels)
             label_axis = dict(
                 title_text = f'Top {self.n_bars} pathways', 
                 title_standoff=self.yaxis_title_standoff,
                 showticklabels=self.plot_pws_yaxis,
                 tickmode='array',
-                tickvals=np.arange(self.n_bars),
+                tickvals=current_label_ids,
                 ticktext=current_labels,
                 range=[-self.bar_size / 2, self.n_bars - 1 + self.bar_size / 2 + self.bargap]
             )
@@ -386,19 +371,13 @@ class _BarChartRace:
                     "label": frame_name,
                     "method": "animate"
                 })
-            
-            title_text = f'Locally enriched pathways per sliding window position'
-            title = {'text': title_text,
-                     'font': {'size': 20},
-                    'x': 0.5, 'xref': 'paper',
-                    'xanchor': 'center', 'yanchor': 'top'}
-            
+
             frame_layout = go.Layout(
                 xaxis = value_axis,
                 yaxis = label_axis,
                 annotations = annotations,
-                autosize=False, width=1000, height=800+self.n_bars*10,
-                title = title,
+                autosize=False, width=1000, height=self.layout_height,
+                title = self.title,
                 bargap = self.bargap,
             )
 
@@ -412,17 +391,22 @@ class _BarChartRace:
         label_ids = self.df_ranks[self.df_ranks.index==i].values[0]
         bar_vals_rev = np.flip(bar_vals)
         label_ids_rev = np.flip(label_ids)
-        label_names = None
-
-        if self.bar_switching_anim:
-            x = bar_vals_rev
-            x[x==0] = np.nan
+        label_names = np.flip(np.array(self.pw_names[label_ids]))     
+        y = self.y_coords.copy()
+        
+        x = bar_vals_rev
+        label_ids_rev_subset = label_ids_rev.copy().astype(np.float64)
+        label_ids_rev_subset[x==0] = np.nan
+        #label_names[x==0] = ''
+        y[x==0] = np.nan
+        if self.bar_switching_anim:            
+            
+            x[x==0] = np.nan           
+            
         else:
             x = pd.Series(bar_vals_rev, index=label_ids_rev)
             x.replace(0, np.nan, inplace=True)
-            #y = pd.Series(label_names, index = label_ids_rev)
-        
-        label_names = np.flip(self.pw_names[label_ids])          
+            y = pd.Series(label_names, index = label_ids_rev)    
 
         colors = self.pw_colors[label_ids_rev]
 
@@ -439,13 +423,14 @@ class _BarChartRace:
                         text=str(j), showarrow=False,
                         xanchor="right", align="right"
                     ))
-
+        print(i)
         #print('x: ', x)
-        #print('y: ', self.y_coords)
+        #print('y: ', y)
+        print()
 
         bar = go.Bar(
             x=x, 
-            y=self.y_coords,
+            y=y,
             textposition=self.bar_textposition,
             hoverinfo='all',
             texttemplate=self.bar_texttemplate,
@@ -461,7 +446,7 @@ class _BarChartRace:
 
             scatter = go.Scatter(
                 x=x, 
-                y=self.y_coords,
+                y=y,
                 mode="text",
                 texttemplate="%{x:,.2f}  ",
                 textposition="middle left",
@@ -470,11 +455,11 @@ class _BarChartRace:
                 hoverinfo="skip",
                 showlegend=False
             )
-            return [bar, scatter], annotations, label_names
+            return [bar, scatter], annotations, label_ids_rev, label_names
 
         if self.plot_labels_over_bars:
             x_ = np.zeros(self.n_bars)
-            y_ = self.y_coords + 0.45
+            y_ = y + 0.45
             scatter = go.Scatter(
                 x=x_, y=y_,
                 customdata=label_names,
@@ -485,9 +470,9 @@ class _BarChartRace:
                 hoverinfo="skip",
                 showlegend=False
             )
-            return [bar, scatter], annotations, label_names
+            return [bar, scatter], annotations, y, label_names
 
-        return [bar], annotations, label_names
+        return [bar], annotations, y, label_names
 
     
     def make_animation(self):
@@ -503,7 +488,7 @@ class _BarChartRace:
             yanchor='bottom',
             buttons=[dict(label="Play",
                           method="animate",
-                          args= self.play_args),
+                          args= [None, self.play_btn_dict]),
                      dict(label="Pause",
                           method="animate",
                           args=[[None], {"frame": {"duration": 0, "redraw": False},
@@ -522,10 +507,9 @@ class _BarChartRace:
                             "visible": True,
                             "xanchor": "right"
                         },
-                        #"fromcurrent": True,
                         "transition": {"duration": self.duration, "easing": "cubic-in-out"},#transition duration must be set at least as long as frame duration
                         "pad": {"b": 10, "t": 50},
-                        "len": 1,
+                        "len": 1.05,
                         "x": 0,
                         "y": 0,
                         "steps": slider_steps
