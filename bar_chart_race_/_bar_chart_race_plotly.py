@@ -71,10 +71,11 @@ class _BarChartRace:
             self.insidetextfont = None
             self.bar_textposition = 'auto'
         #self.inside_label_font_colors = self.get_inside_label_colors(pw_color_is_dark)
-        self.inside_label_font = {**self.bar_label_font, "color": self.get_inside_label_colors(pw_color_is_dark)}#{**self.bar_label_font, "color": "#8A8A8A"}
-        self.outside_label_font = {**self.bar_label_font, "color": "#2a2a2a"}#"#696969"}#}
+        self.inside_label_font = {**self.bar_label_font, "color": self.get_inside_label_colors(pw_color_is_dark)}#{**self.bar_label_font, "color": "#696969"}
+        self.outside_label_font = {**self.bar_label_font, "color": "#2a2a2a"}#"#696969"
 
         self.fixed_xaxis = fixed_xaxis
+        self.val_ax_range = self.get_val_ax_range(fixed_xaxis)
         self.val_ax_label = val_ax_label
 
         self.frame_subset = frame_subset
@@ -85,8 +86,8 @@ class _BarChartRace:
     def get_layout_params(self):
         title_text = f'Locally enriched pathways per sliding window position'
         title = {'text': title_text,
-                    'font': {'size': 20},
-                'x': 0.5, 'xref': 'paper',
+                    'font': {'size': 18},
+                'x': 0.5, 'y':0.91, 'xref': 'paper',
                 'xanchor': 'center', 'yanchor': 'top'}
         
         layout_height = 800
@@ -134,7 +135,7 @@ class _BarChartRace:
         return plot_width, plot_height
 
     def get_value_axis_bounds(self, bar_vals):
-        axis_range = self.xlimit
+        axis_range = self.xlimit if self.orientation == "h" else self.ylimit
         if axis_range is not None:
             axis_min, axis_max = axis_range
         else:
@@ -408,14 +409,18 @@ class _BarChartRace:
                     return colors, is_dark
 
     def set_fixed_max_limits(self):
-        label_limit = (.2, self.n_bars + .8)
+        label_limit = (.5, self.n_bars + .5)
         value_limit = None
         min_val = 0 
         if self.fixed_max:
             value_limit = [min_val, self.df_vals[self.frame_subset[0]:self.frame_subset[1]].max().max() * 1.1]
 
-        self.xlimit = value_limit
-        self.ylimit = label_limit
+        if self.orientation == 'h':
+            self.xlimit = value_limit
+            self.ylimit = label_limit
+        else:
+            self.xlimit = label_limit
+            self.ylimit = value_limit
             
 
     def get_frames(self):
@@ -423,12 +428,12 @@ class _BarChartRace:
         slider_steps = []
 
         bar_locs = np.arange(self.n_bars, 0, -1)
-        
-        if not self.fixed_xaxis:
-            max_bar_val = self.df_vals.to_numpy().max()
+
 
         if self.frame_subset is None: self.frame_subset = [0,len(self.df_vals)]
-        if self.frame_subset[1] > len(self.df_vals): self.frame_subset[1] = len(self.df_vals)
+        if not self.fixed_xaxis:
+            max_bar_val = self.df_vals[self.frame_subset[0]:self.frame_subset[1]].to_numpy().max()
+        
         for i in tqdm(range(self.frame_subset[0],self.frame_subset[1]), 'creating frames'):
             
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
@@ -438,7 +443,11 @@ class _BarChartRace:
             label_axis = dict(title_text = f'Top {self.n_bars} pathways', range=self.ylimit)#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
                             # tickfont=self.tick_label_font)
 
-            value_axis = dict(showgrid=True, type=self.scale, title=self.val_ax_label, range=self.xlimit)#, tickformat=',.0f')
+            value_axis = dict(showgrid=True, type=self.scale, title=self.val_ax_label)#, tickformat=',.0f')
+            value_axis['range'] = self.xlimit if self.orientation == 'h' else self.ylimit
+
+            xaxis, yaxis = (value_axis, label_axis) if self.orientation == 'h' \
+                             else (label_axis, value_axis)
             
             #annotations = self.get_annotations(i) 
             if self.slider and i % self.steps_per_period == 0:
@@ -451,10 +460,10 @@ class _BarChartRace:
                                 }],
                             "label": self.get_period_label_text(i), 
                             "method": "animate"})
-
-            layout = go.Layout(xaxis=value_axis, yaxis=label_axis, #annotations=annotations,
+            
+            layout = go.Layout(xaxis=xaxis, yaxis=yaxis, #annotations=annotations,
                                 autosize=False, width=1000, height=800, #margin={'l': 150}, 
-                                title=self.title, 
+                                title=self.title,
                                 **self.layout_kwargs)
             if self.perpendicular_bar_func:
                 pbar = self.get_perpendicular_bar(bar_vals, i, layout)
@@ -467,14 +476,15 @@ class _BarChartRace:
     def get_data(self, i, bar_locs, bar_vals, max_bar_val):
 
         label_ids = self.df_ranks.iloc[i].values
-        colors = pd.Series(self.pw_colors)#self.pw_colors[label_ids]
+        #colors = pd.Series(self.pw_colors)#self.pw_colors[label_ids]
         label_names = self.pw_names[label_ids]
 
         if self.fixed_xaxis:
             max_bar_val = max(bar_vals)
 
         #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
-        x, y = (bar_vals, bar_locs)
+        x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
+        x[x==0] = np.nan
 
         if not(self.scatter_labels): 
             val_labels = np.round(x, 2).astype(str)
@@ -486,16 +496,15 @@ class _BarChartRace:
 
         bar = go.Bar(
             x=x, y=y,
-            #ids=label_ids.astype(str),
+            ids=label_ids.astype(str), # needed for bar switching animation
             #customdata=self.bar_customdata,
-            #text = self.bar_text,
             textposition=self.bar_textposition,
             texttemplate='%{x:.2f}',#self.bar_texttemplate,
-            orientation=self.orientation,
-            marker_color=colors,
+            marker_color=self.bar_colors,
             cliponaxis=False,
             insidetextfont=self.insidetextfont,
             outsidetextfont=self.bar_label_font,
+            orientation = 'h',
             hovertemplate=self.hovertemplate,
             **self.bar_kwargs
         )     
@@ -505,16 +514,17 @@ class _BarChartRace:
 
             labels_inside_bar = bar_vals >= max_bar_val / 2
             inside_offset = 0.015*max_bar_val
-            outside_offset = 0.05*max_bar_val#[0.01*len(str(bar_val)) for bar_val in bar_vals]
+            outside_offset = 0.05*max_bar_val
             inside_x = np.asarray(x - inside_offset, dtype=object)
             inside_y = np.asarray(y, dtype=object)
-            outside_x = np.asarray(x + outside_offset, dtype=object)
+            outside_x = np.asarray(x + outside_offset, dtype=object)#np.asarray(x + outside_offset, dtype=object)
             outside_y = np.asarray(y, dtype=object)
 
             inside_x[~labels_inside_bar] = None
             inside_y[~labels_inside_bar] = None
             outside_x[labels_inside_bar] = None
             outside_y[labels_inside_bar] = None
+
 
             inside_labels = go.Scatter(
                 x=inside_x, y=inside_y,
@@ -639,7 +649,7 @@ class _BarChartRace:
                             "xanchor": "right"
                         },
                         "transition": {"duration": self.duration, "easing": "cubic-in-out"}, #transition duration must be set at least as long as frame duration
-                        "pad": {"b": 10, "t": 50},
+                        "pad": {"b": 10, "t": 20},
                         "len": 1,
                         "x": 0,
                         "y": 0,
@@ -651,5 +661,4 @@ class _BarChartRace:
         fig = go.Figure(data=data, layout=layout, frames=frames[1:])
         if self.out_filename:
             fig.write_html(self.out_filename, **self.write_html_kwargs)
-        else:
-            return fig
+        return fig
