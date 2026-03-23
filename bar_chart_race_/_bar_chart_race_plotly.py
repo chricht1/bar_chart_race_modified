@@ -20,7 +20,7 @@ class _BarChartRace:
                           bar_textposition='outside', bar_texttemplate=None, bar_label_font=None, 
                           tick_label_font=None, hovertemplate=None, slider=True, slider_dict=None, scale='linear', 
                           bar_kwargs=None, layout_kwargs=None, write_html_kwargs=None, 
-                          filter_column_colors=False, fixed_xaxis = False, xaxis_label='', yaxis_label='', layout_font_size=10,
+                          filter_column_colors=False, fixed_xaxis = True, xaxis_label='', yaxis_label='', layout_font_size=10,
                           scatter_labels=True, frame_subset=None, plot_labels_over_bars=False, labels_max_len=None):
         
         self.data_filename = data_filename
@@ -435,14 +435,11 @@ class _BarChartRace:
         bar_locs = np.arange(self.n_bars, 0, -1)
 
 
-        if not self.fixed_xaxis:
-            max_bar_val = self.df_vals[self.frame_subset[0]:self.frame_subset[1]].to_numpy().max()
-        
         for i in tqdm(range(self.frame_subset[0],self.frame_subset[1]), 'creating frames'):
             
             bar_vals = self.df_vals.iloc[i, :self.n_bars].values
 
-            data = self.get_data(i, bar_locs, bar_vals, max_bar_val)
+            data = self.get_data(i, bar_locs, bar_vals)
 
             label_axis = dict(title_text = self.yaxis_label, range=self.ylimit, showticklabels=False, tickfont=self.tick_label_font)#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
 
@@ -476,14 +473,16 @@ class _BarChartRace:
         return frames, slider_steps
     
 
-    def get_data(self, i, bar_locs, bar_vals, max_bar_val):
+    def get_data(self, i, bar_locs, bar_vals):
 
         label_ids = self.df_ranks.iloc[i].values
         colors = self.pw_colors[label_ids]#pd.Series(self.pw_colors)#
         label_names = self.pw_names[label_ids]
 
-        if self.fixed_xaxis:
-            max_bar_val = max(bar_vals)
+        if not self.fixed_xaxis:
+            val_ax_max = max(bar_vals)
+        else: 
+            val_ax_max = self.xlimit[1]
 
         #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
         x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
@@ -515,9 +514,9 @@ class _BarChartRace:
         if self.scatter_labels: 
             label_names[x==0] = ''
 
-            labels_inside_bar = bar_vals >= max_bar_val / 2
-            inside_offset = 0.065*max_bar_val/4.5 # 0.015
-            outside_offset = 0.53*max_bar_val/4.5 # 0.05
+            labels_inside_bar = bar_vals >= val_ax_max / 2
+            inside_offset = 0.015*val_ax_max # 0.015
+            outside_offset = 0.015*val_ax_max+0.74*val_ax_max/10 # 0.05
             inside_x = np.asarray(x - inside_offset, dtype=object)
             inside_y = np.asarray(y, dtype=object)
             outside_x = np.asarray(x + outside_offset, dtype=object)#np.asarray(x + outside_offset, dtype=object)
