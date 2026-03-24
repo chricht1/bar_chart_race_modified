@@ -21,7 +21,8 @@ class _BarChartRace:
                           tick_label_font=None, hovertemplate=None, slider=True, slider_dict=None, scale='linear', 
                           bar_kwargs=None, layout_kwargs=None, write_html_kwargs=None, 
                           filter_column_colors=False, fixed_xaxis = True, xaxis_label='', yaxis_label='', layout_font_size=10,
-                          scatter_labels=True, frame_subset=None, plot_labels_over_bars=False, labels_max_len=None):
+                          scatter_labels=True, frame_subset=None, plot_labels_over_bars=False, labels_max_len=None,
+                          resolution_scale=1.0, scale_fonts=True):
         
         self.data_filename = data_filename
         self.data_is_wide = data_is_wide
@@ -54,10 +55,17 @@ class _BarChartRace:
         self.duration = self.period_length / steps_per_period
         self.write_html_kwargs = write_html_kwargs or {}
         self.filter_column_colors = filter_column_colors
+        self.resolution_scale = resolution_scale
+        self.scale_fonts = scale_fonts
         
         self.validate_params()
         self.bar_kwargs = self.get_bar_kwargs(bar_kwargs)
         self.layout_kwargs = self.get_layout_kwargs(layout_kwargs)
+        self.layout_kwargs = self.scale_layout_kwargs(self.layout_kwargs)
+        self.period_label = self.scale_period_label(self.period_label)
+        self.bar_label_font = self.scale_font_dict(self.bar_label_font)
+        self.tick_label_font = self.scale_font_dict(self.tick_label_font)
+        self.slider_dict = self.scale_slider_dict(self.slider_dict)
         self.df_vals, self.df_ranks, self.pw_names = self.get_plot_data()
         self.frame_subset = frame_subset
         if self.frame_subset is None: self.frame_subset = [0,len(self.df_vals)]
@@ -80,12 +88,12 @@ class _BarChartRace:
         self.val_ax_range = self.get_val_ax_range(fixed_xaxis)
         self.xaxis_label = xaxis_label
         self.yaxis_label = yaxis_label
-        self.layout_font_size = layout_font_size
+        self.layout_font_size = self.scale_font_size(layout_font_size)
 
         self.labels_max_len = labels_max_len
         if self.labels_max_len is not None: self.shorten_pw_names()
         self.plot_labels_over_bars = plot_labels_over_bars
-        self.title = self.get_title(title)
+        self.title = self.scale_title(self.get_title(title))
         self.layout_height = self.get_layout_params()
 
     def get_layout_params(self):
@@ -125,8 +133,8 @@ class _BarChartRace:
         return np.array(["#ffffff" if val else "#2a2a2a" for val in pw_color_is_dark])
 
     def get_plot_area_pixels(self):
-        width = self.layout_kwargs.get("width", 1000)
-        height = self.layout_kwargs.get("height", 800)
+        width = self.layout_kwargs.get("width", int(1000 * self.resolution_scale))
+        height = self.layout_kwargs.get("height", int(800 * self.resolution_scale))
         margin = self.layout_kwargs.get("margin", {})
         if not isinstance(margin, dict):
             margin = {}
@@ -139,6 +147,87 @@ class _BarChartRace:
         plot_width = max(1, width - left - right)
         plot_height = max(1, height - top - bottom)
         return plot_width, plot_height
+
+    def scale_font_size(self, size):
+        if not self.scale_fonts or self.resolution_scale == 1:
+            return size
+        if isinstance(size, (int, float)):
+            return size * self.resolution_scale
+        return size
+
+    def scale_font_dict(self, font_dict):
+        if not self.scale_fonts or self.resolution_scale == 1:
+            return font_dict
+        if not isinstance(font_dict, dict):
+            return font_dict
+        scaled = dict(font_dict)
+        if "size" in scaled and isinstance(scaled["size"], (int, float)):
+            scaled["size"] = scaled["size"] * self.resolution_scale
+        return scaled
+
+    def scale_period_label(self, period_label):
+        if not self.scale_fonts or self.resolution_scale == 1:
+            return period_label
+        if period_label is False or period_label is None:
+            return period_label
+        if isinstance(period_label, dict):
+            scaled = dict(period_label)
+            font = scaled.get("font")
+            if isinstance(font, dict):
+                scaled["font"] = self.scale_font_dict(font)
+            return scaled
+        return period_label
+
+    def scale_title(self, title):
+        if not self.scale_fonts or self.resolution_scale == 1:
+            return title
+        if isinstance(title, dict):
+            scaled = dict(title)
+            font = scaled.get("font")
+            if isinstance(font, dict):
+                scaled["font"] = self.scale_font_dict(font)
+            return scaled
+        return title
+
+    def scale_slider_dict(self, slider_dict):
+        if not self.scale_fonts or self.resolution_scale == 1:
+            return slider_dict
+        if not isinstance(slider_dict, dict):
+            return slider_dict
+        scaled = dict(slider_dict)
+        currentvalue = scaled.get("currentvalue")
+        if isinstance(currentvalue, dict):
+            cv = dict(currentvalue)
+            font = cv.get("font")
+            if isinstance(font, dict):
+                cv["font"] = self.scale_font_dict(font)
+            scaled["currentvalue"] = cv
+        if "font" in scaled and isinstance(scaled["font"], dict):
+            scaled["font"] = self.scale_font_dict(scaled["font"])
+        pad = scaled.get("pad")
+        if isinstance(pad, dict):
+            pad_scaled = dict(pad)
+            for key in ("b", "t", "l", "r"):
+                if key in pad_scaled and isinstance(pad_scaled[key], (int, float)):
+                    pad_scaled[key] = pad_scaled[key] * self.resolution_scale
+            scaled["pad"] = pad_scaled
+        return scaled
+
+    def scale_layout_kwargs(self, layout_kwargs):
+        if not isinstance(layout_kwargs, dict) or self.resolution_scale == 1:
+            return layout_kwargs
+        scaled = dict(layout_kwargs)
+        for key in ("width", "height"):
+            if key in scaled and isinstance(scaled[key], (int, float)):
+                scaled[key] = scaled[key] * self.resolution_scale
+        margin = scaled.get("margin")
+        if isinstance(margin, dict):
+            margin_scaled = dict(margin)
+            for key in ("l", "r", "t", "b"):
+                if key in margin_scaled and isinstance(margin_scaled[key], (int, float)):
+                    margin_scaled[key] = margin_scaled[key] * self.resolution_scale
+            scaled["margin"] = margin_scaled
+        return scaled
 
     def get_value_axis_bounds(self, bar_vals):
         axis_range = self.xlimit if self.orientation == "h" else self.ylimit
@@ -193,6 +282,11 @@ class _BarChartRace:
 
         if self.orientation not in ('h', 'v'):
             raise ValueError('`orientation` must be "h" or "v"')
+
+        if not isinstance(self.resolution_scale, (int, float)) or self.resolution_scale <= 0:
+            raise ValueError('`resolution_scale` must be a positive number')
+        if not isinstance(self.scale_fonts, bool):
+            raise TypeError('`scale_fonts` must be a boolean')
 
     def get_bar_kwargs(self, bar_kwargs):
         if bar_kwargs is None:
@@ -657,6 +751,7 @@ class _BarChartRace:
                         "x": 0,
                         "y": -0.04
                     }
+            self.slider_dict = self.scale_slider_dict(self.slider_dict)
         self.slider_dict["transition"] = {"duration": self.duration, "easing": "cubic-in-out"} #transition duration must be set at least as long as frame duration
         self.slider_dict["steps"] = slider_steps
         if self.slider:
