@@ -20,9 +20,9 @@ class _BarChartRace:
                           bar_textposition='outside', bar_texttemplate=None, bar_label_font=None, 
                           tick_label_font=None, hovertemplate=None, slider=True, slider_dict=None, scale='linear', 
                           bar_kwargs=None, layout_kwargs=None, write_html_kwargs=None, 
-                          filter_column_colors=False, fixed_xaxis = True, xaxis_label='', yaxis_label='', layout_font_size=10,
-                          scatter_labels=True, frame_subset=None, plot_labels_over_bars=False, labels_max_len=None,
-                          resolution_scale=1.0, scale_fonts=True):
+                          filter_column_colors=False, fixed_xaxis = True, xaxis_label='', yaxis_label='', show_yaxis_ticklabels=True,
+                          layout_font_size=10, resolution_scale=1.0, scale_fonts=True,
+                          scatter_labels=True, frame_subset=None, plot_labels_over_bars=False, labels_max_len=None):
         
         self.data_filename = data_filename
         self.data_is_wide = data_is_wide
@@ -88,6 +88,7 @@ class _BarChartRace:
         self.val_ax_range = self.get_val_ax_range(fixed_xaxis)
         self.xaxis_label = xaxis_label
         self.yaxis_label = yaxis_label
+        self.show_yaxis_ticklabels = show_yaxis_ticklabels
         self.layout_font_size = self.scale_font_size(layout_font_size)
 
         self.labels_max_len = labels_max_len
@@ -516,7 +517,7 @@ class _BarChartRace:
         value_limit = None
         min_val = 0 
         if self.fixed_max:
-            value_limit = [min_val, self.df_vals[self.frame_subset[0]:self.frame_subset[1]].max().max() * 1.8]
+            value_limit = [min_val, self.df_vals[self.frame_subset[0]:self.frame_subset[1]].max().max() * 1.6]
         
         self.xlimit = value_limit
         self.ylimit = label_limit
@@ -535,7 +536,7 @@ class _BarChartRace:
 
             data = self.get_data(i, bar_locs, bar_vals)
 
-            label_axis = dict(title_text = self.yaxis_label, range=self.ylimit, showticklabels=False, tickfont=self.tick_label_font)#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
+            label_axis = dict(title_text = self.yaxis_label, range=self.ylimit, showticklabels=self.show_yaxis_ticklabels, tickfont=self.tick_label_font)#dict(tickmode='array', tickvals=bar_locs, ticktext=None, 
 
             value_axis = dict(showgrid=True, type=self.scale, title=self.xaxis_label, tickfont=self.tick_label_font)#tickformat=',.0f')
             value_axis['range'] = self.xlimit
@@ -610,7 +611,7 @@ class _BarChartRace:
 
             labels_inside_bar = bar_vals >= val_ax_max / 2
             inside_offset = 0.015*val_ax_max # 0.015
-            outside_offset = 0.015*val_ax_max+0.74*val_ax_max/10 # 0.05
+            outside_offset = 0.015*val_ax_max+0.9*val_ax_max/15 # 0.05
             inside_x = np.asarray(x - inside_offset, dtype=object)
             inside_y = np.asarray(y, dtype=object)
             outside_x = np.asarray(x + outside_offset, dtype=object)#np.asarray(x + outside_offset, dtype=object)
