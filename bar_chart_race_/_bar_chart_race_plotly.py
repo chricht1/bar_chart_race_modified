@@ -411,6 +411,42 @@ class _BarChartRace:
 
     def get_plot_data(self):
         df_wide, pw_names = self.get_wide_df_and_lut()
+        
+        if self.n_bars is None:
+            self.n_bars = (df_wide.iloc[0].values > 0).sum()
+        else: 
+            self.n_bars = min(self.n_bars, (df_wide.iloc[0].values > 0).sum())
+
+        df_wide_idx = df_wide.index
+        if df_wide.index[0] == 1:
+            df_wide_idx -= 1
+
+        df_wide.index = df_wide_idx * self.steps_per_period
+        new_index = range(df_wide.index[-1]+1)
+        df_wide = df_wide.reindex(new_index)
+
+        df_wide_interp = df_wide.interpolate()
+        topN = np.sort(df_wide_interp.to_numpy(), axis=1)[:, -self.n_bars:][:, ::-1]
+
+        df_vals = pd.DataFrame(topN, index=df_wide_interp.index, columns=range(1, self.n_bars + 1))
+        #df_vals.to_csv('df_vals_interp.csv')
+
+        df_ranks_wide = df_wide_interp.rank(axis=1, method='first', ascending=False)
+        df_ranks_wide[df_ranks_wide > self.n_bars] = np.nan
+        df_ranks_wide.to_csv("df_ranks_wide.csv")
+        ser = df_ranks_wide.stack().reset_index()
+
+        ser.dropna(inplace=True)
+
+        df_ser = pd.DataFrame(ser).astype('int32')
+        #df_ser.to_csv("df_ser.csv")
+        df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
+        #df_ranks.to_csv("df_ranks.csv")
+        return df_vals, df_ranks, pw_names
+    
+
+    '''def get_plot_data(self):
+        df_wide, pw_names = self.get_wide_df_and_lut()
 
         if self.n_bars is None:
             self.n_bars = (df_wide.iloc[0].values > 0).sum()
@@ -436,10 +472,10 @@ class _BarChartRace:
 
         ser = df_ranks_wide.stack().reset_index()
 
-        df_ser = pd.DataFrame(ser).astype('int32')
+        df_ser = pd.DataFrame(ser).astype('Int64')
 
         df_ranks = df_ser.pivot(index=df_ser.columns[0], columns=0, values=df_ser.columns[1])
-        return df_vals, df_ranks, pw_names
+        return df_vals, df_ranks, pw_names'''
 
 
     def get_col_filt(self):
@@ -569,8 +605,9 @@ class _BarChartRace:
     
 
     def get_data(self, i, bar_locs, bar_vals):
-
+        #print(self.df_ranks.head(5))
         label_ids = self.df_ranks.iloc[i].values
+        #print(label_ids)
         colors = self.pw_colors[label_ids]#pd.Series(self.pw_colors)#
         label_names = self.pw_names[label_ids]
 
@@ -580,8 +617,9 @@ class _BarChartRace:
             val_ax_max = self.xlimit[1]
 
         #bar_locs = bar_locs + np.random.rand(len(bar_locs)) / 10000 # done to prevent stacking of bars
-        x, y = (bar_vals, bar_locs) if self.orientation == 'h' else (bar_locs, bar_vals)
-        x[x==0] = np.nan
+        x, y = bar_vals, bar_locs
+        x = np.where(x == 0, np.nan, x)
+        #x[x==0] = np.nan
 
         if not(self.scatter_labels): 
             val_labels = np.round(x, 2).astype(str)
